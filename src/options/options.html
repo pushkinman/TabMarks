@@ -48,18 +48,19 @@
             <div>
               <h2>Quick labels</h2>
               <p class="muted">
-                Shown in the popup and right-click menu. Picking a label also applies its <b>auto color</b> (unless you
-                chose a color by hand). Icon style and symbol override the display setting for tabs with that label. The
-                <b>Pull requests</b> group is what “Cycle PR status” steps through.
+                Shown in the popup and right-click menu, organised in groups. Rename a group by editing its name, move
+                labels between groups with the Group column, or create a new one. Picking a label also applies its
+                <b>auto color</b> (unless you chose a color by hand); icon style and symbol override the display setting
+                for tabs with that label.
               </p>
             </div>
             <div class="row">
               <button id="reset-labels" class="btn ghost">Reset to defaults</button>
-              <button id="add-label" class="btn primary">+ Add label</button>
+              <button id="add-group" class="btn primary">+ Add group</button>
             </div>
           </div>
+          <div id="pr-cycle" class="pr-cycle muted"></div>
           <div id="labels-box"></div>
-          <datalist id="group-names"></datalist>
         </section>
 
         <section id="colors" class="card">

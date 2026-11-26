@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TabMarks",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzcOGgpboLoH2nte8FINxDSn6l2gfyDA8irixIv8mMJ2vnyh2ibwrhwOMLaz0oOdBs8A75qpH7Bz81G/16n0vhODSYz4/F2LyRjHkY7Ht9S244mQMgdpocrobzuHhq3cocK7ePU50boQXVXqEgics4NC+UGxMy4zulKPVv2R8oYo/JnQRX0ed5c1/cvvsqCz0xrxTgqMPN2XdgQRcgFPxetAPj5JOED1oOuyVtilkMX5i0QlpVfgH6ShlS1QAmL0jK2V9a5NPAdiF7YA0/FoRhPAsqGhmr6rNnZ5ogTwbMCsWT8C3OUz75ex7zxAOZlj90AnSrMJ+xPFrxK+EreqFxQIDAQAB",
   "description": "Color, label and annotate individual tabs with emojis, icons and notes. Built for PR-heavy dev workflows.",
   "icons": {

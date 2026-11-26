@@ -48,6 +48,7 @@ A mark is a **color**, an optional **label** and an optional **note**. You can m
   - None
 - **Show mark on:** icon + title, icon only, or title only.
 - **Title marker:** color emoji, symbol, or none.
+- **Label in title:** emoji + text (`[👀 Awaiting review]`), emoji only (`👀`), or hidden. Emoji-only falls back to text for labels without an emoji.
 - **Per-label override.** A label can set its own icon style and symbol. For example, "Merged" defaults to the purple merge symbol.
 
 ### Developer workflow
@@ -67,7 +68,7 @@ A mark is a **color**, an optional **label** and an optional **note**. You can m
 - **Work labels:** 🐛 Bug, 🔥 Hotfix, 🚧 WIP, 📦 Release, 🚢 Deploy, 📌 Reference, 🧭 Investigating.
 - **Labels carry colors.** Picking "Awaiting review" also colors the tab Review-amber, unless you chose a color by hand.
 - **Dev colors:** Draft, Review, Approved, Merged, Blocked and CI, in GitHub-like hues.
-- **"Cycle PR status" shortcut.** It steps through the *Pull requests* group. Assign a key at `brave://extensions/shortcuts`.
+- **"Cycle PR status" shortcut.** It steps through the *Pull requests* group by default; you can choose another group on the settings page. Assign a key at `brave://extensions/shortcuts`.
 
 ### Notes
 - Type a note in the popup. It also appears as a **floating sticky note** on the page, which you can drag, collapse or hide, and edit inline.
@@ -96,6 +97,7 @@ A mark is a **color**, an optional **label** and an optional **note**. You can m
 ### Customization (⚙ in the popup → Rules & colors)
 - Rules
 - Quick labels (up to 40): emoji, text, group, auto color, icon style, symbol, order
+- Label groups: add, rename (click the name), reorder, delete; move a label with its Group picker, or create a group from it with "＋ New group…"
 - Title emoji per color, show or hide colors, unlimited custom colors (solid or 2-stop gradient)
 - Shortcuts overview
 - JSON export/import of configuration plus notes and marks

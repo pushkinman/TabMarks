@@ -12,8 +12,11 @@ export async function loadConfig() {
 }
 
 export function normalizeConfig(r = {}) {
+  const settings = { ...DEFAULT_SETTINGS, ...(r.settings || {}) };
+  // Migrate v1.0–1.2 setting without touching stored data.
+  if (!r.settings?.labelStyle && r.settings?.labelInTitle === false) settings.labelStyle = 'none';
   return {
-    settings: { ...DEFAULT_SETTINGS, ...(r.settings || {}) },
+    settings,
     labels: Array.isArray(r.labels) ? r.labels : DEFAULT_LABELS.map((l) => ({ ...l })),
     rules: Array.isArray(r.rules) ? r.rules : [],
     customColors: Array.isArray(r.customColors) ? r.customColors : [],

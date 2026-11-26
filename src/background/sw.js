@@ -619,7 +619,11 @@ async function computeRender(tab, mark, info, cfg) {
       if (s.titleMarker === 'emoji' && color.emoji) parts.push(color.emoji);
       else if (s.titleMarker === 'symbol') parts.push(symbolById(symbol).text);
     }
-    if (label && s.labelInTitle) parts.push(`[${label.emoji ? label.emoji + ' ' : ''}${label.text}]`);
+    if (label && s.labelStyle !== 'none') {
+      // Emoji-only falls back to text for labels without an emoji (e.g. custom labels).
+      if (s.labelStyle === 'emoji' && label.emoji) parts.push(label.emoji);
+      else parts.push(`[${label.emoji ? label.emoji + ' ' : ''}${label.text}]`);
+    }
     if (parts.length) prefix = parts.join(' ') + ' ';
   }
 
@@ -734,7 +738,8 @@ async function cycleColor(tab) {
 
 async function cyclePrStatus(tab) {
   const cfg = await loadConfig();
-  const prLabels = cfg.labels.filter((l) => l.group === PR_GROUP);
+  const group = cfg.settings.prCycleGroup || PR_GROUP;
+  const prLabels = cfg.labels.filter((l) => (l.group || 'General') === group);
   if (!prLabels.length) return;
   const cur = (await getMarksRaw())[tab.id]?.labelId;
   const idx = prLabels.findIndex((l) => l.id === cur);

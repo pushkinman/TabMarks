@@ -1,4 +1,4 @@
-import { ICON_STYLES, SHOW_ON, TITLE_MARKERS } from '../lib/constants.js';
+import { ICON_STYLES, LABEL_STYLES, SHOW_ON, TITLE_MARKERS } from '../lib/constants.js';
 import {
   allColors,
   applyTheme,
@@ -616,6 +616,7 @@ function renderSettings() {
     );
   seg('#show-on', SHOW_ON, 'showOn');
   seg('#title-marker', TITLE_MARKERS, 'titleMarker');
+  seg('#label-style', LABEL_STYLES, 'labelStyle');
   seg(
     '#theme',
     [
@@ -625,7 +626,6 @@ function renderSettings() {
     ],
     'theme',
   );
-  $('#label-in-title').checked = !!s.labelInTitle;
   $('#floating-notes').checked = !!s.floatingNotes;
 }
 
@@ -690,7 +690,6 @@ function bind() {
       if (document.activeElement !== $('#quick')) $('#quick-results').hidden = true;
     }, 150);
   });
-  $('#label-in-title').addEventListener('change', (e) => saveSettings({ labelInTitle: e.target.checked }));
   $('#floating-notes').addEventListener('change', (e) => saveSettings({ floatingNotes: e.target.checked }));
 
   chrome.storage.onChanged.addListener(async (changes, area) => {

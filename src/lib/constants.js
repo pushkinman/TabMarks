@@ -82,6 +82,13 @@ export const TITLE_MARKERS = [
   { id: 'none', name: 'None' },
 ];
 
+// How a label appears in the tab title.
+export const LABEL_STYLES = [
+  { id: 'full', name: 'Emoji + text' },
+  { id: 'emoji', name: 'Emoji only' },
+  { id: 'none', name: 'Hidden' },
+];
+
 export const SHOW_ON = [
   { id: 'both', name: 'Icon + title' },
   { id: 'icon', name: 'Icon only' },
@@ -93,7 +100,8 @@ export const DEFAULT_SETTINGS = {
   symbol: 'circle',
   showOn: 'both',
   titleMarker: 'emoji',
-  labelInTitle: true,
+  labelStyle: 'full', // full | emoji | none (replaces the old labelInTitle boolean)
+  prCycleGroup: PR_GROUP, // label group stepped through by the "Cycle PR status" shortcut
   floatingNotes: true,
   theme: 'system', // system | light | dark
 };

@@ -162,20 +162,170 @@ function renderRules() {
 // ---------------------------------------------------------------------------
 // Labels
 
+// ---- Label groups ---------------------------------------------------------
+
+const groupOf = (l) => (l.group || '').trim() || 'General';
+
+function groupNames() {
+  return labelGroups(cfg.labels).map((g) => g.name);
+}
+
+function uniqueGroupName(base) {
+  const names = new Set(groupNames());
+  if (!names.has(base)) return base;
+  let n = 2;
+  while (names.has(`${base} ${n}`)) n++;
+  return `${base} ${n}`;
+}
+
+function saveLabelsAndSettings() {
+  save('labels', true);
+  save('settings', true);
+}
+
+function renameGroup(oldName, newName) {
+  newName = (newName || '').trim();
+  if (!newName || newName === oldName) return renderLabels();
+  for (const l of cfg.labels) if (groupOf(l) === oldName) l.group = newName;
+  if (cfg.settings.prCycleGroup === oldName) cfg.settings.prCycleGroup = newName;
+  saveLabelsAndSettings();
+  renderLabels();
+  renderRules();
+}
+
+function moveGroup(name, dir) {
+  const groups = labelGroups(cfg.labels);
+  const i = groups.findIndex((g) => g.name === name);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= groups.length) return;
+  [groups[i], groups[j]] = [groups[j], groups[i]];
+  cfg.labels = groups.flatMap((g) => g.labels);
+  save('labels', true);
+  renderLabels();
+}
+
+function deleteGroup(name) {
+  const n = cfg.labels.filter((l) => groupOf(l) === name).length;
+  if (!confirm(`Delete the “${name}” group and its ${n} label${n === 1 ? '' : 's'}? Tabs using them lose that label.`)) return;
+  cfg.labels = cfg.labels.filter((l) => groupOf(l) !== name);
+  save('labels', true);
+  renderLabels();
+  renderRules();
+}
+
+function addLabelTo(group, { focus = 'text' } = {}) {
+  if (cfg.labels.length >= MAX_LABELS) return toast(`Up to ${MAX_LABELS} labels`);
+  const label = { id: uid('lbl'), emoji: '🏷️', text: 'New label', group };
+  let at = -1;
+  cfg.labels.forEach((l, i) => groupOf(l) === group && (at = i));
+  cfg.labels.splice(at < 0 ? cfg.labels.length : at + 1, 0, label);
+  save('labels', true);
+  renderLabels();
+  const sel = focus === 'group' ? `[data-group="${CSS.escape(group)}"] .group-name` : `[data-label="${label.id}"] .label-text`;
+  const input = document.querySelector(sel);
+  input?.focus();
+  input?.select();
+}
+
+function addGroup() {
+  addLabelTo(uniqueGroupName('New group'), { focus: 'group' });
+}
+
+/** Group picker for a label row, with an inline “New group…” option. */
+function groupSelect(l) {
+  const NEW = '__new__';
+  const wrap = el('div', { class: 'group-cell' });
+  const sel = el(
+    'select',
+    {
+      onchange: (e) => {
+        if (e.target.value !== NEW) {
+          l.group = e.target.value;
+          save('labels', true);
+          return renderLabels();
+        }
+        const input = el('input', {
+          type: 'text',
+          placeholder: 'New group name',
+          maxlength: 30,
+          onkeydown: (ev) => {
+            if (ev.key === 'Enter') ev.target.blur();
+            if (ev.key === 'Escape') renderLabels();
+          },
+          onblur: (ev) => {
+            const name = ev.target.value.trim();
+            if (name) {
+              l.group = name;
+              save('labels', true);
+            }
+            renderLabels();
+          },
+        });
+        wrap.replaceChildren(input);
+        input.focus();
+      },
+    },
+    ...groupNames().map((g) => el('option', { value: g }, g)),
+    el('option', { value: NEW }, '＋ New group…'),
+  );
+  sel.value = groupOf(l);
+  wrap.append(sel);
+  return wrap;
+}
+
 function renderLabels() {
   const box = $('#labels-box');
   box.replaceChildren();
   const groups = labelGroups(cfg.labels);
-  $('#group-names').replaceChildren(...groups.map((g) => el('option', { value: g.name })));
-  $('#add-label').disabled = cfg.labels.length >= MAX_LABELS;
-  $('#add-label').title = cfg.labels.length >= MAX_LABELS ? `Up to ${MAX_LABELS} labels` : '';
+  const full = cfg.labels.length >= MAX_LABELS;
+  $('#add-group').disabled = full;
+  $('#add-group').title = full ? `Up to ${MAX_LABELS} labels` : '';
+
+  // Which group the “Cycle PR status” shortcut steps through.
+  const prSel = el(
+    'select',
+    { onchange: (e) => ((cfg.settings.prCycleGroup = e.target.value), save('settings', true), renderLabels()) },
+    ...groups.map((g) => el('option', { value: g.name }, g.name)),
+  );
+  if (!groups.some((g) => g.name === cfg.settings.prCycleGroup)) prSel.prepend(el('option', { value: cfg.settings.prCycleGroup }, `${cfg.settings.prCycleGroup} (missing)`));
+  prSel.value = cfg.settings.prCycleGroup;
+  $('#pr-cycle').replaceChildren(el('span', {}, '“Cycle PR status” shortcut steps through'), prSel);
 
   if (!cfg.labels.length) {
-    box.append(el('div', { class: 'empty' }, 'No labels.'));
+    box.append(el('div', { class: 'empty-box' }, el('b', {}, 'No labels'), 'Add a group to get started, or reset to the defaults.'));
     return;
   }
-  for (const g of groups) {
-    const block = el('div', { class: 'group-block' }, el('div', { class: 'group-title' }, g.name, el('span', { class: 'n' }, String(g.labels.length))));
+  groups.forEach((g, gi) => {
+    const isPr = g.name === cfg.settings.prCycleGroup;
+    const head = el(
+      'div',
+      { class: 'group-title' },
+      el('input', {
+        type: 'text',
+        class: 'group-name',
+        value: g.name,
+        maxlength: 30,
+        title: 'Rename group',
+        'aria-label': 'Group name',
+        onkeydown: (e) => {
+          if (e.key === 'Enter') e.target.blur();
+          if (e.key === 'Escape') ((e.target.value = g.name), e.target.blur());
+        },
+        onchange: (e) => renameGroup(g.name, e.target.value),
+      }),
+      el('span', { class: 'n' }, `${g.labels.length} label${g.labels.length === 1 ? '' : 's'}`),
+      isPr ? el('span', { class: 'pill', title: 'Stepped through by the “Cycle PR status” shortcut' }, 'PR cycle') : null,
+      el('span', { class: 'grow' }),
+      el(
+        'div',
+        { class: 'group-actions' },
+        el('button', { class: 'btn ghost small', onclick: () => addLabelTo(g.name), disabled: full }, '+ Label'),
+        el('button', { class: 'icon-btn', title: 'Move group up', disabled: gi === 0, onclick: () => moveGroup(g.name, -1) }, '↑'),
+        el('button', { class: 'icon-btn', title: 'Move group down', disabled: gi === groups.length - 1, onclick: () => moveGroup(g.name, 1) }, '↓'),
+        el('button', { class: 'btn ghost small danger', title: 'Delete group', onclick: () => deleteGroup(g.name) }, 'Delete'),
+      ),
+    );
+    const block = el('div', { class: 'group-block', 'data-group': g.name }, head);
     block.append(
       el(
         'div',
@@ -208,21 +358,23 @@ function renderLabels() {
       block.append(
         el(
           'div',
-          { class: 'trow label-cols' },
+          { class: 'trow label-cols', 'data-label': l.id },
           el('input', {
             type: 'text',
             class: 'emoji-input',
             value: l.emoji || '',
             maxlength: 8,
+            title: 'Emoji (⌃⌘Space opens the emoji picker)',
             oninput: (e) => ((l.emoji = e.target.value.trim()), save('labels')),
           }),
-          el('input', { type: 'text', value: l.text || '', maxlength: 40, oninput: (e) => ((l.text = e.target.value), save('labels')) }),
           el('input', {
             type: 'text',
-            value: l.group || '',
-            list: 'group-names',
-            onchange: (e) => ((l.group = e.target.value.trim() || 'General'), save('labels', true), renderLabels()),
+            class: 'label-text',
+            value: l.text || '',
+            maxlength: 40,
+            oninput: (e) => ((l.text = e.target.value), save('labels')),
           }),
+          groupSelect(l),
           colorSelect(l.colorId, (v) => ((l.colorId = v || undefined), save('labels', true))),
           styleSel,
           symSel,
@@ -231,7 +383,7 @@ function renderLabels() {
       );
     }
     box.append(block);
-  }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -474,16 +626,12 @@ function bind() {
     renderRules();
     $('#rules-table').querySelector('.trow:last-child input[type=text]')?.focus();
   });
-  $('#add-label').addEventListener('click', () => {
-    if (cfg.labels.length >= MAX_LABELS) return;
-    cfg.labels.push({ id: uid('lbl'), emoji: '🏷️', text: 'New label', group: 'General' });
-    save('labels', true);
-    renderLabels();
-  });
+  $('#add-group').addEventListener('click', addGroup);
   $('#reset-labels').addEventListener('click', () => {
     if (!confirm('Replace all quick labels with the defaults?')) return;
     cfg.labels = DEFAULT_LABELS.map((l) => ({ ...l }));
-    save('labels', true);
+    cfg.settings.prCycleGroup = DEFAULT_SETTINGS.prCycleGroup;
+    saveLabelsAndSettings();
     renderLabels();
     renderRules();
   });
