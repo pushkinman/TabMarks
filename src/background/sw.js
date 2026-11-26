@@ -357,6 +357,69 @@ async function restoreClosed(poolId) {
   return { ok: true, tabId: tab.id };
 }
 
+/**
+ * Restore notes/marks from a JSON backup. Entries whose URL is open in a tab
+ * without a mark are applied to it; the rest go to "Recently closed".
+ * Never overwrites an existing mark and skips exact duplicates.
+ */
+async function importMarks(entries) {
+  await ensureSession();
+  const cfg = await loadConfig();
+  const labelIds = new Set(cfg.labels.map((l) => l.id));
+  const colorIds = new Set(allColors(cfg).map((c) => c.id));
+  const tabs = await chrome.tabs.query({});
+  const res = await serial(async () => {
+    const { marks = {}, restorePool = [] } = await chrome.storage.local.get(['marks', 'restorePool']);
+    const used = new Set(Object.keys(marks).map(Number));
+    const out = { applied: 0, restorable: 0, skipped: 0, ids: [] };
+    for (const raw of entries) {
+      if (!raw || typeof raw.url !== 'string' || !raw.url) {
+        out.skipped++;
+        continue;
+      }
+      const mark = blankMark(null);
+      mark.url = raw.url;
+      mark.title = String(raw.title || '').slice(0, 500);
+      mark.note = String(raw.note || '').slice(0, 20000);
+      if (raw.colorId && colorIds.has(raw.colorId)) {
+        mark.colorId = raw.colorId;
+        mark.colorSource = 'manual';
+      }
+      if (raw.labelId && labelIds.has(raw.labelId)) {
+        mark.labelId = raw.labelId;
+        mark.labelSource = 'manual';
+      } else if (raw.customLabel) {
+        mark.customLabel = String(raw.customLabel).slice(0, 60);
+        mark.labelSource = 'manual';
+      }
+      if (isEmptyMark(mark)) {
+        out.skipped++;
+        continue;
+      }
+      const tab = tabs.find((t) => t.url === raw.url && !used.has(t.id) && !isRestrictedUrl(t.url));
+      if (tab) {
+        marks[tab.id] = { ...mark, windowId: tab.windowId, index: tab.index };
+        used.add(tab.id);
+        out.applied++;
+        out.ids.push(tab.id);
+        continue;
+      }
+      const sig = (e) => JSON.stringify([e.url, e.note || '', e.colorId || null, e.labelId || null, e.customLabel || null]);
+      if (restorePool.some((e) => sig(e) === sig(mark)) || Object.values(marks).some((m) => sig(m) === sig(mark))) {
+        out.skipped++;
+        continue;
+      }
+      pushToPool(restorePool, mark, -1, 'tab');
+      out.restorable++;
+    }
+    await chrome.storage.local.set({ marks, restorePool });
+    return out;
+  });
+  for (const id of res.ids) pushRender(id);
+  const { ids, ...counts } = res;
+  return counts;
+}
+
 /** Drop references to labels/colors that no longer exist. */
 async function cleanupStaleRefs() {
   await ensureSession();
@@ -864,6 +927,9 @@ const handlers = {
       await chrome.storage.local.set({ restorePool: restorePool.filter((e) => e.poolId !== msg.poolId) });
     });
     return { ok: true };
+  },
+  async 'tm:importMarks'(msg) {
+    return importMarks(Array.isArray(msg.entries) ? msg.entries : []);
   },
   async 'tm:toggleNote'(msg) {
     await toggleNote(msg.tabId);

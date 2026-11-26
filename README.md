@@ -11,6 +11,16 @@ Color, label and annotate individual browser tabs with emojis, favicon styles an
 
 After editing the code, click the reload icon on the TabMarks card in `brave://extensions`.
 
+## Updating without losing data
+
+Your settings, labels, rules, colors, marks and notes are stored by Brave per extension ID, separately from the code. Updating the code never touches them.
+
+- **The extension ID is pinned.** The `key` in `manifest.json` fixes the ID to `efndngfadgjplfknhdmghaooinnoakhe`, whichever folder you load it from. Don't remove or change `key`, or Brave will treat it as a new, empty extension.
+- **To update:** run `git pull` in the folder, then click ⟳ on TabMarks in `brave://extensions`. Open tabs keep their marks.
+- **Never click "Remove"** in `brave://extensions`. That deletes the stored data. Use reload or disable instead.
+- **Backups:** go to Rules & colors → Backup → **Export JSON**. **Import JSON** restores settings, labels, rules and colors, and also notes and marks. Notes for tabs that are open get re-applied to them; the rest go to *Recently closed*, where you can reopen them. Import never overwrites existing marks and skips duplicates.
+- New versions add new settings with their defaults. Changes to how data is stored come with a migration, never a reset.
+
 ## What it does
 
 ### Marking a tab
@@ -83,7 +93,7 @@ A mark is a **color**, an optional **label** and an optional **note**. You can m
 - Quick labels (up to 40): emoji, text, group, auto color, icon style, symbol, order
 - Title emoji per color, show or hide colors, unlimited custom colors (solid or 2-stop gradient)
 - Shortcuts overview
-- JSON export/import of all configuration
+- JSON export/import of configuration plus notes and marks
 
 ## Keyboard shortcuts
 

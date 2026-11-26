@@ -353,7 +353,8 @@ async function renderShortcuts() {
 
 function status(text) {
   $('#backup-status').textContent = text;
-  setTimeout(() => ($('#backup-status').textContent = ''), 4000);
+  clearTimeout(status.t);
+  status.t = setTimeout(() => ($('#backup-status').textContent = ''), 8000);
 }
 
 async function exportJson() {
@@ -408,7 +409,17 @@ async function importJson(file) {
     await chrome.storage.local.set(next);
     cfg = next;
     renderAll();
-    status('Imported.');
+    // Notes & marks: re-applied to matching open tabs, the rest land in "Recently closed".
+    const entries = [...(data.openTabsSnapshot || []), ...(data.closedTabsSnapshot || [])];
+    if (entries.length) {
+      const r = await chrome.runtime.sendMessage({ type: 'tm:importMarks', entries });
+      status(
+        `Imported settings. Notes/marks: ${r.applied} applied to open tabs, ${r.restorable} added to “Recently closed”` +
+          (r.skipped ? `, ${r.skipped} skipped (empty or already there).` : '.'),
+      );
+    } else {
+      status('Imported settings.');
+    }
   } catch (e) {
     status(`Import failed: ${e.message}`);
   }
