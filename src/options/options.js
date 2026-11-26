@@ -24,9 +24,28 @@ function el(tag, props = {}, ...children) {
 const timers = {};
 function save(key, immediate = false) {
   clearTimeout(timers[key]);
-  const write = () => chrome.storage.local.set({ [key]: cfg[key] });
+  const write = () => chrome.storage.local.set({ [key]: cfg[key] }).then(() => toast('Saved'));
   if (immediate) write();
   else timers[key] = setTimeout(write, 300);
+}
+
+function toast(text) {
+  const t = $('#toast');
+  t.textContent = `✓  ${text}`;
+  t.classList.add('show');
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => t.classList.remove('show'), 1400);
+}
+
+/** Toggle switch: <label class="switch"><input type=checkbox><span class="track"></span>text</label> */
+function switchEl(checked, onchange, text = '', title = null) {
+  return el(
+    'label',
+    { class: 'switch', title },
+    el('input', { type: 'checkbox', checked, onchange: (e) => onchange(e.target.checked) }),
+    el('span', { class: 'track' }),
+    text,
+  );
 }
 
 function move(arr, i, d) {
@@ -45,7 +64,7 @@ function colorSelect(value, onchange, noneText = '— none —') {
       og = el('optgroup', { label: group });
       sel.append(og);
     }
-    og.append(el('option', { value: c.id }, `${c.emoji || '●'} ${c.name}${c.hidden ? ' (hidden)' : ''}`));
+    og.append(el('option', { value: c.id }, `${c.emoji || '●'}\u2002${c.name}${c.hidden ? ' (hidden)' : ''}`));
   }
   sel.value = value || '';
   return sel;
@@ -55,7 +74,7 @@ function labelSelect(value, onchange) {
   const sel = el('select', { onchange: (e) => onchange(e.target.value || null) }, el('option', { value: '' }, '— none —'));
   for (const g of labelGroups(cfg.labels)) {
     const og = el('optgroup', { label: g.name });
-    for (const l of g.labels) og.append(el('option', { value: l.id }, `${l.emoji || ''} ${l.text}`.trim()));
+    for (const l of g.labels) og.append(el('option', { value: l.id }, `${l.emoji ? l.emoji + '\u2002' : ''}${l.text}`));
     sel.append(og);
   }
   sel.value = value || '';
@@ -79,7 +98,27 @@ function renderRules() {
   const box = $('#rules-table');
   box.replaceChildren();
   if (!cfg.rules.length) {
-    box.append(el('div', { class: 'empty' }, 'No rules yet. Example: domain github.com/my-org, keyword "pull", label 👀 Awaiting review.'));
+    box.append(
+      el(
+        'div',
+        { class: 'empty-box' },
+        el('b', {}, 'No rules yet'),
+        'Example: every GitHub pull request page gets the 👀 Awaiting review label.',
+        el('br'),
+        el(
+          'button',
+          {
+            class: 'btn',
+            onclick: () => {
+              cfg.rules.push({ id: uid('rule'), enabled: true, domain: 'github.com', keyword: '/pull/', colorId: null, labelId: 'lbl-pr-awaiting' });
+              save('rules', true);
+              renderRules();
+            },
+          },
+          'Add this example',
+        ),
+      ),
+    );
     return;
   }
   box.append(
@@ -99,12 +138,7 @@ function renderRules() {
       el(
         'div',
         { class: 'trow rules-cols' },
-        el('input', {
-          type: 'checkbox',
-          checked: r.enabled !== false,
-          title: 'Enabled',
-          onchange: (e) => ((r.enabled = e.target.checked), save('rules', true)),
-        }),
+        switchEl(r.enabled !== false, (v) => ((r.enabled = v), save('rules', true)), '', 'Enabled'),
         el('input', {
           type: 'text',
           value: r.domain || '',
@@ -141,7 +175,7 @@ function renderLabels() {
     return;
   }
   for (const g of groups) {
-    const block = el('div', { class: 'group-block' }, el('div', { class: 'group-title' }, g.name));
+    const block = el('div', { class: 'group-block' }, el('div', { class: 'group-title' }, g.name, el('span', { class: 'n' }, String(g.labels.length))));
     block.append(
       el(
         'div',
@@ -177,7 +211,7 @@ function renderLabels() {
           { class: 'trow label-cols' },
           el('input', {
             type: 'text',
-            class: 'emoji',
+            class: 'emoji-input',
             value: l.emoji || '',
             maxlength: 8,
             oninput: (e) => ((l.emoji = e.target.value.trim()), save('labels')),
@@ -223,7 +257,7 @@ function renderColors() {
         el('div', { class: 'name' }, el('div', {}, c.name), el('div', { class: 'group' }, c.group)),
         el('input', {
           type: 'text',
-          class: 'emoji',
+          class: 'emoji-input',
           title: 'Title emoji',
           value: cfg.colorPrefs.emojis[c.id] ?? c.emoji,
           oninput: (e) => {
@@ -233,12 +267,7 @@ function renderColors() {
             save('colorPrefs');
           },
         }),
-        el('input', {
-          type: 'checkbox',
-          title: 'Show in palette',
-          checked: !hidden,
-          onchange: (e) => (setHidden(c.id, !e.target.checked), renderColors()),
-        }),
+        switchEl(!hidden, (v) => (setHidden(c.id, !v), renderColors()), '', 'Show in palette'),
       );
     }),
   );
@@ -304,17 +333,12 @@ function renderColors() {
         stops,
         el('input', {
           type: 'text',
-          class: 'emoji',
+          class: 'emoji-input',
           title: 'Title emoji',
           value: c.emoji || '',
           oninput: (e) => ((c.emoji = e.target.value.trim()), save('customColors')),
         }),
-        el(
-          'label',
-          { class: 'check' },
-          el('input', { type: 'checkbox', checked: !hidden, onchange: (e) => setHidden(c.id, !e.target.checked) }),
-          'Show',
-        ),
+        switchEl(!hidden, (v) => setHidden(c.id, !v), 'Show'),
         el(
           'button',
           {
@@ -340,11 +364,19 @@ function renderColors() {
 
 async function renderShortcuts() {
   const cmds = await chrome.commands.getAll();
+  const names = {
+    _execute_action: 'Open TabMarks (quick label)',
+    'cycle-color': 'Mark tab / cycle through colors',
+    'next-marked': 'Jump to next marked tab (same color if this tab is marked)',
+    'toggle-note': 'Show / hide this tab’s note on the page',
+    'remove-mark': 'Unmark tab (keeps the note)',
+    'cycle-pr-status': 'Cycle pull request status label',
+  };
   const box = $('#shortcut-list');
   box.replaceChildren();
-  for (const c of cmds) {
-    if (!c.description) continue;
-    box.append(el('div', {}, c.shortcut ? el('kbd', {}, c.shortcut) : el('span', { class: 'muted' }, 'not set')), el('div', {}, c.description));
+  for (const [name, text] of Object.entries(names)) {
+    const c = cmds.find((x) => x.name === name);
+    box.append(c?.shortcut ? el('kbd', {}, c.shortcut) : el('span', { class: 'unset' }, 'not set'), el('div', {}, text));
   }
 }
 
@@ -353,6 +385,7 @@ async function renderShortcuts() {
 
 function status(text) {
   $('#backup-status').textContent = text;
+  toast(text.split(':')[0].split('.')[0]);
   clearTimeout(status.t);
   status.t = setTimeout(() => ($('#backup-status').textContent = ''), 8000);
 }
@@ -491,11 +524,27 @@ function bind() {
   });
 }
 
+function scrollSpy() {
+  const links = [...document.querySelectorAll('#nav a')];
+  const setOn = (id) => links.forEach((a) => a.classList.toggle('on', a.getAttribute('href') === `#${id}`));
+  const obs = new IntersectionObserver(
+    (entries) => {
+      const vis = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+      if (vis[0]) setOn(vis[0].target.id);
+    },
+    { rootMargin: '-10% 0px -60% 0px' },
+  );
+  document.querySelectorAll('main section.card').forEach((s) => obs.observe(s));
+  setOn(location.hash.slice(1) || 'rules');
+}
+
 async function init() {
   cfg = await loadConfig();
+  $('#version').textContent = `v${chrome.runtime.getManifest().version}`;
   renderAll();
   renderShortcuts();
   bind();
+  scrollSpy();
 }
 
 init();

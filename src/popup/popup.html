@@ -11,107 +11,120 @@
       <img id="tab-icon" alt="" />
       <div class="tab-info">
         <div id="tab-title" class="ellipsis"></div>
-        <div id="tab-host" class="ellipsis muted"></div>
+        <div id="current" class="current"></div>
       </div>
-      <button id="open-options" class="icon-btn" title="Rules & colors">⚙</button>
     </header>
 
-    <div id="restricted" class="notice" hidden></div>
+    <nav class="views" role="tablist">
+      <button role="tab" data-view="mark" id="nav-mark">Mark</button>
+      <button role="tab" data-view="tabs" id="nav-tabs">Tabs <span id="count" class="count"></span></button>
+      <button role="tab" data-view="settings" id="nav-settings">Settings</button>
+    </nav>
 
-    <main id="editor">
-      <section class="quick">
-        <input
-          id="quick"
-          type="text"
-          autocomplete="off"
-          spellcheck="false"
-          placeholder="Type a label or color…"
-          aria-label="Quick pick a label or color"
-        />
-        <div id="quick-results" hidden></div>
-        <div id="quick-hint" class="muted small">
-          <kbd>↵</kbd> apply · <kbd>1</kbd>–<kbd>9</kbd> label · <kbd>←</kbd><kbd>→</kbd> group · <kbd>0</kbd> clear
-          label · <kbd>⌘⌫</kbd> remove · <kbd>Esc</kbd> close
+    <!-- Mark ---------------------------------------------------------------->
+    <div class="view" id="view-mark" role="tabpanel">
+      <div id="restricted" class="notice" hidden></div>
+      <div id="editor">
+        <div class="quick-wrap">
+          <svg class="quick-icon" viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6" />
+            <path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+          </svg>
+          <input
+            id="quick"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Find a label or color…"
+            aria-label="Quick pick a label or color"
+          />
+          <div id="quick-results" class="popover" hidden></div>
         </div>
-      </section>
+        <div id="quick-hint" class="hint">
+          <span><kbd>↵</kbd> apply</span><span><kbd>1</kbd>–<kbd>9</kbd> label</span><span><kbd>←</kbd><kbd>→</kbd> group</span
+          ><span><kbd>⌘⌫</kbd> unmark</span>
+        </div>
 
-      <section>
-        <div class="section-head">
-          <h2>Color</h2>
-          <button id="clear-color" class="link">None</button>
-        </div>
-        <div id="colors" class="swatches"></div>
-      </section>
 
-      <section>
-        <div class="section-head">
-          <h2>Label</h2>
-          <button id="clear-label" class="link">Clear</button>
-        </div>
-        <div id="label-groups" class="seg"></div>
-        <div id="labels" class="chips"></div>
-        <form id="custom-label-form" class="inline-form">
-          <input id="custom-label" type="text" maxlength="60" placeholder="Custom label…" autocomplete="off" />
-          <button type="submit" class="btn">Set</button>
-        </form>
-      </section>
+        <section>
+          <div class="section-head"><h2>Color</h2></div>
+          <div id="colors" class="swatches"></div>
+        </section>
 
-      <section>
-        <div class="section-head">
-          <h2>Note</h2>
-          <label class="check"><input type="checkbox" id="note-onpage" /> Show on page</label>
-        </div>
-        <textarea id="note" rows="3" placeholder="Notes for this tab… (saved automatically)"></textarea>
-        <div class="row space">
-          <span id="note-status" class="muted small"></span>
-          <button id="remove-mark" class="btn danger">Remove color &amp; label</button>
-        </div>
-      </section>
-    </main>
+        <section>
+          <div class="section-head">
+            <h2>Label</h2>
+            <div id="label-groups" class="group-tabs"></div>
+          </div>
+          <div id="labels" class="chips"></div>
+        </section>
 
-    <section id="list-section">
-      <div class="section-head">
-        <h2>Marked tabs <span id="count" class="muted"></span></h2>
+        <section>
+          <div class="section-head">
+            <h2>Note</h2>
+            <label class="switch small" title="Show this note as a sticky note on the page">
+              <input type="checkbox" id="note-onpage" /><span class="track"></span>On page
+            </label>
+          </div>
+          <div class="note-wrap">
+            <textarea id="note" rows="3" placeholder="Jot something down for this tab…"></textarea>
+            <span id="note-status" class="note-status"></span>
+          </div>
+        </section>
       </div>
-      <input id="search" type="search" placeholder="Search title, label, note or URL" autocomplete="off" />
+    </div>
+
+    <!-- Tabs ---------------------------------------------------------------->
+    <div class="view" id="view-tabs" role="tabpanel" hidden>
+      <div class="search-wrap">
+        <svg class="quick-icon" viewBox="0 0 16 16" aria-hidden="true">
+          <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6" />
+          <path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+        </svg>
+        <input id="search" type="search" placeholder="Search titles, labels, notes, URLs" autocomplete="off" />
+      </div>
       <div id="filters" class="seg small"></div>
       <div id="list"></div>
-    </section>
+      <div id="closed-wrap" hidden>
+        <div class="list-head"><h2>Recently closed <span id="closed-count" class="muted"></span></h2></div>
+        <div id="closed"></div>
+      </div>
+    </div>
 
-    <details id="closed-section">
-      <summary>Recently closed <span id="closed-count" class="muted"></span></summary>
-      <div id="closed"></div>
-    </details>
-
-    <details id="advanced">
-      <summary>Display settings</summary>
+    <!-- Settings ------------------------------------------------------------>
+    <div class="view" id="view-settings" role="tabpanel" hidden>
       <div class="setting">
         <div class="setting-name">Icon style</div>
         <div id="icon-styles" class="style-grid"></div>
       </div>
       <div class="setting">
-        <div class="setting-name">Symbol <span class="muted small">(Symbol icon style &amp; title marker)</span></div>
+        <div class="setting-name">Symbol <span class="muted small">for the Symbol style &amp; title marker</span></div>
         <div id="symbols" class="symbol-grid"></div>
       </div>
-      <div class="setting">
-        <div class="setting-name">Show mark on</div>
-        <div id="show-on" class="seg"></div>
+      <div class="setting two">
+        <div>
+          <div class="setting-name">Show mark on</div>
+          <div id="show-on" class="seg small"></div>
+        </div>
+        <div>
+          <div class="setting-name">Title marker</div>
+          <div id="title-marker" class="seg small"></div>
+        </div>
       </div>
       <div class="setting">
-        <div class="setting-name">Title marker</div>
-        <div id="title-marker" class="seg"></div>
-      </div>
-      <div class="setting">
-        <label class="check"><input type="checkbox" id="label-in-title" /> Show label in tab title</label>
-        <label class="check"><input type="checkbox" id="floating-notes" /> Show notes floating on pages</label>
+        <label class="switch"><input type="checkbox" id="label-in-title" /><span class="track"></span>Show label in tab title</label>
+        <label class="switch"><input type="checkbox" id="floating-notes" /><span class="track"></span>Show notes floating on pages</label>
       </div>
       <div class="setting">
         <div class="setting-name">Theme</div>
-        <div id="theme" class="seg"></div>
+        <div id="theme" class="seg small"></div>
       </div>
-    </details>
-
-    <footer id="shortcuts" class="muted small"></footer>
+      <div class="setting">
+        <div class="setting-name row space">Shortcuts <button id="edit-shortcuts" class="link">Edit</button></div>
+        <div id="shortcuts" class="shortcut-list"></div>
+      </div>
+      <button id="open-options" class="btn block">Rules, labels, colors &amp; backup →</button>
+    </div>
 
     <script type="module" src="popup.js"></script>
   </body>

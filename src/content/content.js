@@ -217,42 +217,62 @@
     :host { all: initial; }
     .card {
       --accent: #8b8d98; --accent-solid: #8b8d98;
-      --bg: #ffffff; --fg: #1c2024; --muted: #60646c; --line: rgba(0,0,0,.10); --btn: rgba(0,0,0,.06);
-      position: fixed; z-index: 2147483647; width: 280px; max-width: calc(100vw - 24px);
+      --bg: rgba(255,255,255,.96); --fg: #16181d; --fg2: #3c4049; --muted: #6b7079;
+      --line: rgba(16,24,40,.10); --btn: rgba(16,24,40,.06);
+      position: fixed; z-index: 2147483647; width: 288px; max-width: calc(100vw - 24px);
       background: var(--bg); color: var(--fg);
-      border: 1px solid var(--line); border-radius: 12px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.08);
-      font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      -webkit-backdrop-filter: blur(14px) saturate(1.4); backdrop-filter: blur(14px) saturate(1.4);
+      border: 1px solid var(--line); border-radius: 14px;
+      box-shadow: 0 18px 40px -12px rgba(16,24,40,.28), 0 4px 12px rgba(16,24,40,.08);
+      font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
       overflow: hidden; display: flex; flex-direction: column;
+      animation: tm-in .18s cubic-bezier(.2,.8,.2,1);
     }
-    .card.dark { --bg: #1e1f24; --fg: #edeef0; --muted: #a0a3ab; --line: rgba(255,255,255,.12); --btn: rgba(255,255,255,.08); }
-    .strip { height: 4px; background: var(--accent); flex: none; }
+    @keyframes tm-in { from { opacity: 0; transform: translateY(6px) scale(.98); } }
+    .card.dark {
+      --bg: rgba(30,31,37,.94); --fg: #eceef2; --fg2: #c9ccd3; --muted: #8f939c;
+      --line: rgba(255,255,255,.10); --btn: rgba(255,255,255,.08);
+      box-shadow: 0 18px 40px -12px rgba(0,0,0,.6), 0 4px 12px rgba(0,0,0,.35);
+    }
+    .strip { height: 3px; background: var(--accent); flex: none; }
     .bar {
-      display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 10px;
+      display: flex; align-items: center; gap: 7px; padding: 7px 6px 5px 12px;
       cursor: grab; user-select: none; -webkit-user-select: none; flex: none;
     }
     .bar:active { cursor: grabbing; }
-    .title { font-weight: 600; white-space: nowrap; }
+    .title { font-weight: 600; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
+    .em { font-family: "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif; line-height: 1; }
     .label {
-      font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      min-width: 0; flex: 1;
+      display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 150px;
+      height: 20px; padding: 0 8px; border-radius: 999px;
+      font-size: 11px; font-weight: 500; color: var(--fg2);
+      background: color-mix(in srgb, var(--accent-solid) 16%, transparent);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
+    .label:empty { display: none; }
+    .label span:last-child { overflow: hidden; text-overflow: ellipsis; }
+    .spacer { flex: 1; }
     .btn {
-      all: unset; cursor: pointer; width: 22px; height: 22px; border-radius: 6px;
-      display: grid; place-items: center; color: var(--muted); font-size: 15px; line-height: 1;
+      all: unset; cursor: pointer; width: 24px; height: 24px; border-radius: 7px;
+      display: grid; place-items: center; color: var(--muted);
+      transition: background .12s, color .12s;
     }
+    .btn svg { width: 14px; height: 14px; }
     .btn:hover { background: var(--btn); color: var(--fg); }
+    .btn:focus-visible { outline: 2px solid var(--accent-solid); outline-offset: 1px; }
     textarea {
       all: unset; box-sizing: border-box; display: block; width: 100%;
-      min-height: 72px; max-height: 45vh; overflow: auto;
-      padding: 2px 12px 10px; white-space: pre-wrap; word-wrap: break-word;
-      font: inherit; color: var(--fg); cursor: text;
+      min-height: 56px; max-height: 45vh; overflow: auto;
+      padding: 2px 12px 4px; white-space: pre-wrap; word-wrap: break-word;
+      font: inherit; font-size: 13.5px; line-height: 1.55; color: var(--fg); cursor: text;
     }
     textarea::placeholder { color: var(--muted); }
-    .foot { font-size: 11px; color: var(--muted); padding: 0 12px 8px; height: 14px; }
-    .card.collapsed { width: auto; max-width: 280px; }
+    .foot { font-size: 11px; color: var(--muted); padding: 0 12px 8px; height: 15px; text-align: right; }
+    .card.collapsed { width: auto; max-width: 288px; }
     .card.collapsed textarea, .card.collapsed .foot { display: none; }
-    .card.collapsed .label { flex: 0 1 auto; }
+    .card.collapsed .bar { padding-bottom: 7px; }
+    .card.collapsed .spacer { flex: 0 0 4px; }
   `;
 
   function el(tag, props = {}, ...children) {
@@ -264,6 +284,20 @@
     }
     for (const c of children) e.append(c);
     return e;
+  }
+
+  function svgIcon(d) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 16 16');
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-width', '1.6');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('fill', 'none');
+    svg.append(path);
+    return svg;
   }
 
   function ensureNoteHost() {
@@ -279,9 +313,19 @@
     root.adoptedStyleSheets = [sheet];
 
     const label = el('span', { class: 'label' });
-    const collapseBtn = el('button', { class: 'btn', title: 'Collapse' }, '–');
-    const closeBtn = el('button', { class: 'btn', title: 'Hide note on this tab (reopen from the TabMarks popup or right-click menu)' }, '×');
-    const bar = el('div', { class: 'bar' }, el('span', { class: 'title' }, '📝 Note'), label, collapseBtn, closeBtn);
+    const collapseBtn = el('button', { class: 'btn', title: 'Collapse' });
+    collapseBtn.append(svgIcon('M4 8h8'));
+    const closeBtn = el('button', { class: 'btn', title: 'Hide note on this tab (⌥⇧O or the TabMarks popup brings it back)' });
+    closeBtn.append(svgIcon('M4.5 4.5l7 7M11.5 4.5l-7 7'));
+    const bar = el(
+      'div',
+      { class: 'bar' },
+      el('span', { class: 'title' }, el('span', { class: 'em' }, '📝'), 'Note'),
+      label,
+      el('span', { class: 'spacer' }),
+      collapseBtn,
+      closeBtn,
+    );
     const ta = el('textarea', { placeholder: 'Write a note for this tab…', spellcheck: 'true' });
     const foot = el('div', { class: 'foot' });
     const card = el('div', { class: 'card' }, el('div', { class: 'strip' }), bar, ta, foot);
@@ -388,7 +432,7 @@
   function setCollapsed(collapsed) {
     const { card, collapseBtn } = S.ui;
     card.classList.toggle('collapsed', collapsed);
-    collapseBtn.textContent = collapsed ? '+' : '–';
+    collapseBtn.replaceChildren(svgIcon(collapsed ? 'M4 8h8M8 4v8' : 'M4 8h8'));
     collapseBtn.title = collapsed ? 'Expand' : 'Collapse';
     if (S.note) S.note.collapsed = collapsed;
     if (S.note?.pos) placeCard(S.note.pos);
@@ -461,7 +505,11 @@
     card.classList.toggle('dark', !!isDark(n.theme));
     card.style.setProperty('--accent', n.accent || '#8b8d98');
     card.style.setProperty('--accent-solid', n.accentSolid || '#8b8d98');
-    label.textContent = n.label || '';
+    label.replaceChildren();
+    if (n.labelText) {
+      if (n.labelEmoji) label.append(el('span', { class: 'em' }, n.labelEmoji));
+      label.append(el('span', {}, n.labelText));
+    }
     if (S.root.activeElement !== ta && ta.value !== n.text) ta.value = n.text;
     setCollapsed(!!S.note.collapsed);
     placeCard(S.note.pos);

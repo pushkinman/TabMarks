@@ -25,7 +25,12 @@ Your settings, labels, rules, colors, marks and notes are stored by Brave per ex
 
 ### Marking a tab
 A mark is a **color**, an optional **label** and an optional **note**. You can mark a tab three ways:
-- **Toolbar popup** (`Alt+Shift+L`): a color palette, label chips grouped by General, Pull requests and Work, a custom label field, and a note box. The popup opens with a quick-pick box focused:
+- **Toolbar popup** (`Alt+Shift+L`) has three views:
+  - **Mark**: the color palette, label chips grouped by General, Pull requests and Work, and a note box. The tab's current color and label show in the header, each with its own × to clear it.
+  - **Tabs**: your marked tabs and recently closed ones, with search.
+  - **Settings**: display settings and shortcuts.
+
+  The popup opens on Mark with the quick-pick box focused:
   - Type a few letters, then press `Enter` to apply the top match and close the popup. `Shift+Enter` applies it and keeps the popup open. Use `↑`/`↓` to move through matches. If nothing matches, Enter sets what you typed as a custom label.
   - With the box empty, `1`–`9` applies that label from the current group, `0` clears the label, `←`/`→` switch groups, and `⌘⌫` removes the color and label.
   - `Esc` clears the box, or closes the popup if the box is already empty.

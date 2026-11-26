@@ -638,6 +638,8 @@ async function computeRender(tab, mark, info, cfg) {
     accent: color ? cssFill(color) : null,
     accentSolid: color ? cssSolid(color) : null,
     label: label ? `${label.emoji ? label.emoji + ' ' : ''}${label.text}` : '',
+    labelEmoji: label?.emoji || '',
+    labelText: label?.text || '',
   };
   return { prefix, favicon, note };
 }

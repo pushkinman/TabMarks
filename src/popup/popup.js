@@ -22,6 +22,7 @@ let cfg;
 let marks = {};
 let tab;
 let markable = false;
+let view = 'mark';
 let activeGroup = localStorage.getItem('tm.group') || null;
 let filter = 'all';
 
@@ -34,8 +35,13 @@ function el(tag, props = {}, ...children) {
     else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
     else e.setAttribute(k, v === true ? '' : v);
   }
-  for (const c of children) if (c != null) e.append(c);
+  for (const c of children) if (c != null && c !== '') e.append(c);
   return e;
+}
+
+/** Emoji + text with proper spacing. */
+function labelContent(emoji, text) {
+  return [emoji ? el('span', { class: 'emoji' }, emoji) : null, text];
 }
 
 function send(type, extra = {}) {
@@ -43,9 +49,6 @@ function send(type, extra = {}) {
 }
 
 const currentMark = () => marks[tab.id] || null;
-
-// ---------------------------------------------------------------------------
-// Header
 
 function hostOf(url) {
   try {
@@ -59,13 +62,66 @@ function faviconFor(url) {
   return chrome.runtime.getURL(`/_favicon/?pageUrl=${encodeURIComponent(url)}&size=32`);
 }
 
+// ---------------------------------------------------------------------------
+// Views
+
+function setView(name) {
+  view = name;
+  for (const b of document.querySelectorAll('.views button')) {
+    const on = b.dataset.view === name;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-selected', String(on));
+  }
+  for (const v of ['mark', 'tabs', 'settings']) $(`#view-${v}`).hidden = v !== name;
+  if (name === 'mark' && markable) $('#quick').focus();
+  if (name === 'tabs') $('#search').focus();
+}
+
+// ---------------------------------------------------------------------------
+// Header
+
 async function renderHeader() {
   tab = (await chrome.tabs.get(tab.id).catch(() => null)) || tab;
   const m = currentMark();
   $('#tab-title').textContent = m?.title || tab.title || 'Untitled';
-  $('#tab-host').textContent = hostOf(tab.url);
   // The tab's live favicon already shows its mark.
   $('#tab-icon').src = tab.favIconUrl || faviconFor(tab.url);
+}
+
+// ---------------------------------------------------------------------------
+// Current mark pill
+
+function renderCurrent() {
+  const m = currentMark();
+  const box = $('#current');
+  box.replaceChildren();
+  const color = colorById(cfg, m?.colorId);
+  const label = resolveLabel(m, cfg);
+  if (!color && !label) {
+    box.append(el('span', { class: 'host ellipsis' }, hostOf(tab.url) + (markable ? '  ·  not marked' : '')));
+    return;
+  }
+  if (color) {
+    box.append(
+      el(
+        'span',
+        { class: `tag${m.colorSource === 'rule' ? ' rule' : ''}`, title: m.colorSource === 'rule' ? 'Applied by a rule' : null },
+        el('span', { class: 'swatch', style: `background:${cssFill(color)}` }),
+        color.name,
+        el('button', { class: 'x', title: 'Remove color', onclick: () => send('tm:setColor', { colorId: null }) }, '×'),
+      ),
+    );
+  }
+  if (label) {
+    box.append(
+      el(
+        'span',
+        { class: `tag${m.labelSource === 'rule' ? ' rule' : ''}` },
+        ...labelContent(label.emoji, label.text),
+        el('button', { class: 'x', title: 'Remove label', onclick: () => send('tm:setLabel', { labelId: null }) }, '×'),
+      ),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -103,12 +159,17 @@ function buildQuickItems(raw) {
   return items;
 }
 
+function updateKbdHints() {
+  const q = $('#quick');
+  document.body.classList.toggle('kbd-hints', document.activeElement === q && !q.value);
+}
+
 function renderQuick() {
   const raw = $('#quick').value;
   quickItems = buildQuickItems(raw);
   const box = $('#quick-results');
   box.hidden = !quickItems.length;
-  $('#quick-hint').hidden = !!quickItems.length;
+  updateKbdHints();
   if (!quickItems.length) return;
   quickIndex = Math.min(quickIndex, quickItems.length - 1);
   box.replaceChildren(
@@ -117,14 +178,18 @@ function renderQuick() {
       if (it.kind === 'label') {
         const color = colorById(cfg, it.l.colorId);
         body = [
-          color ? el('span', { class: 'swatch', style: `background:${cssFill(color)}` }) : el('span', { class: 'swatch', style: 'visibility:hidden' }),
-          el('span', { class: 'ellipsis' }, `${it.l.emoji ? it.l.emoji + ' ' : ''}${it.l.text}`),
+          el('span', { class: 'swatch', style: color ? `background:${cssFill(color)}` : 'visibility:hidden' }),
+          el('span', { class: 'ellipsis' }, ...labelContent(it.l.emoji, it.l.text)),
           el('span', { class: 'kind' }, it.l.group || 'Label'),
         ];
       } else if (it.kind === 'color') {
         body = [el('span', { class: 'swatch', style: `background:${cssFill(it.c)}` }), el('span', {}, it.c.name), el('span', { class: 'kind' }, 'Color')];
       } else {
-        body = [el('span', { class: 'swatch', style: 'visibility:hidden' }), el('span', { class: 'ellipsis' }, `🏷️ Use “${it.text}” as label`), el('span', { class: 'kind' }, 'Custom')];
+        body = [
+          el('span', { class: 'swatch', style: 'visibility:hidden' }),
+          el('span', { class: 'ellipsis' }, ...labelContent('🏷️', `Label as “${it.text}”`)),
+          el('span', { class: 'kind' }, 'Custom'),
+        ];
       }
       return el(
         'div',
@@ -136,6 +201,7 @@ function renderQuick() {
               renderQuick();
             }
           },
+          onmousedown: (e) => e.preventDefault(), // keep focus in the input
           onclick: (e) => applyQuick(it, e.shiftKey),
         },
         ...body,
@@ -212,25 +278,25 @@ async function onQuickKey(e) {
 // ---------------------------------------------------------------------------
 // Editor
 
+// Two tidy rows: everyday + dev colors first, then extended + gradients, then custom.
+const COLOR_ROWS = ['Basic', 'Dev', 'Extended', 'Gradients', 'Custom'];
+
 function renderColors() {
   const box = $('#colors');
-  box.replaceChildren();
   const cur = currentMark()?.colorId;
-  let lastGroup = null;
-  for (const c of visibleColors(cfg)) {
-    if (lastGroup && c.group !== lastGroup && ['Gradients', 'Dev', 'Custom'].includes(c.group)) {
-      box.append(el('div', { class: 'swatch-sep' }));
-    }
-    lastGroup = c.group;
-    box.append(
+  const colors = visibleColors(cfg).sort((a, b) => COLOR_ROWS.indexOf(a.group) - COLOR_ROWS.indexOf(b.group));
+  box.replaceChildren(
+    ...colors.map((c) =>
       el('button', {
         class: `swatch${c.id === cur ? ' on' : ''}`,
-        title: `${c.emoji || ''} ${c.name}`.trim(),
+        title: `${c.name}${c.emoji ? '  ' + c.emoji : ''}`,
+        'aria-label': c.name,
+        'aria-pressed': String(c.id === cur),
         style: `background:${cssFill(c)}`,
         onclick: () => send('tm:setColor', { colorId: c.id === cur ? null : c.id }),
       }),
-    );
-  }
+    ),
+  );
 }
 
 function renderLabels() {
@@ -239,8 +305,7 @@ function renderLabels() {
   const curDef = m?.labelId ? cfg.labels.find((l) => l.id === m.labelId) : null;
   if (!activeGroup || !groups.some((g) => g.name === activeGroup)) activeGroup = curDef?.group || groups[0]?.name;
 
-  const seg = $('#label-groups');
-  seg.replaceChildren(
+  $('#label-groups').replaceChildren(
     ...groups.map((g) =>
       el(
         'button',
@@ -257,46 +322,42 @@ function renderLabels() {
     ),
   );
 
-  const box = $('#labels');
-  box.replaceChildren();
   const group = groups.find((g) => g.name === activeGroup);
-  (group?.labels || []).forEach((l, i) => {
-    const color = colorById(cfg, l.colorId);
-    const on = m?.labelId === l.id;
-    const tip = [i < 9 ? `Key ${i + 1}` : null, color ? `also sets color: ${color.name}` : null].filter(Boolean).join(' · ');
-    box.append(
-      el(
+  $('#labels').replaceChildren(
+    ...(group?.labels || []).map((l, i) => {
+      const color = colorById(cfg, l.colorId);
+      const on = m?.labelId === l.id;
+      const tip = [i < 9 ? `Press ${i + 1}` : null, color ? `also sets ${color.name}` : null].filter(Boolean).join(' · ');
+      return el(
         'button',
         {
           class: `chip${on ? ' on' : ''}`,
-          style: color ? `--chip-color:${cssSolid(color)}` : null,
+          style: color ? `--c:${cssSolid(color)}` : null,
           title: tip || null,
+          'aria-pressed': String(on),
           onclick: () => send('tm:setLabel', { labelId: on ? null : l.id }),
         },
-        color ? el('span', { class: 'dot', style: `background:${cssFill(color)}` }) : null,
-        l.emoji ? el('span', { class: 'emoji' }, l.emoji) : null,
-        l.text,
+        ...labelContent(l.emoji, l.text),
         i < 9 ? el('span', { class: 'num' }, String(i + 1)) : null,
-      ),
-    );
-  });
-  const input = $('#custom-label');
-  if (document.activeElement !== input) input.value = m?.customLabel || '';
+      );
+    }),
+  );
 }
 
 function renderNote() {
   const m = currentMark();
   const ta = $('#note');
   if (document.activeElement !== ta) ta.value = m?.note || '';
-  $('#note-onpage').checked = !m?.noteHidden;
-  $('#note-onpage').disabled = !cfg.settings.floatingNotes;
-  $('#note-onpage').parentElement.title = cfg.settings.floatingNotes
+  const sw = $('#note-onpage');
+  sw.checked = !m?.noteHidden;
+  sw.disabled = !cfg.settings.floatingNotes;
+  sw.closest('label').title = cfg.settings.floatingNotes
     ? 'Show this note as a sticky note on the page'
-    : 'Floating notes are turned off in Display settings';
-  $('#remove-mark').disabled = !(m?.colorId || m?.labelId || m?.customLabel);
+    : 'Floating notes are turned off in Settings';
 }
 
 function renderEditor() {
+  renderCurrent();
   $('#editor').hidden = !markable;
   if (!markable) return;
   renderColors();
@@ -305,20 +366,23 @@ function renderEditor() {
 }
 
 // ---------------------------------------------------------------------------
-// Marked-tab list
+// Tabs view: marked tabs
+
+function emptyState(title, text) {
+  return el('div', { class: 'empty' }, el('b', {}, title), text);
+}
 
 async function renderList() {
   const tabs = await chrome.tabs.query({});
   const byId = new Map(tabs.map((t) => [t.id, t]));
-  const colors = allColors(cfg);
-  const colorOrder = new Map(colors.map((c, i) => [c.id, i]));
+  const colorOrder = new Map(allColors(cfg).map((c, i) => [c.id, i]));
   const q = $('#search').value.trim().toLowerCase();
 
   let entries = Object.entries(marks)
     .map(([id, m]) => ({ id: Number(id), m, t: byId.get(Number(id)) }))
     .filter((e) => e.t);
+  $('#count').textContent = entries.length || '';
 
-  // Filter chips
   const groups = labelGroups(cfg.labels).map((g) => g.name);
   const filters = ['all', ...groups, 'notes'];
   if (!filters.includes(filter)) filter = 'all';
@@ -333,14 +397,12 @@ async function renderList() {
             renderList();
           },
         },
-        f === 'all' ? 'All' : f === 'notes' ? '📝 With notes' : f,
+        f === 'all' ? 'All' : f === 'notes' ? 'With notes' : f,
       ),
     ),
   );
   if (filter === 'notes') entries = entries.filter((e) => e.m.note?.trim());
-  else if (filter !== 'all') {
-    entries = entries.filter((e) => cfg.labels.find((l) => l.id === e.m.labelId)?.group === filter);
-  }
+  else if (filter !== 'all') entries = entries.filter((e) => cfg.labels.find((l) => l.id === e.m.labelId)?.group === filter);
 
   if (q) {
     entries = entries.filter((e) => {
@@ -360,16 +422,19 @@ async function renderList() {
     return a.t.index - b.t.index;
   });
 
-  $('#count').textContent = Object.keys(marks).filter((id) => byId.has(Number(id))).length || '';
   const list = $('#list');
   list.replaceChildren();
   if (!entries.length) {
     list.append(
-      el('div', { class: 'empty' }, q || filter !== 'all' ? 'No matching tabs.' : 'No marked tabs yet. Pick a color or label above, or press Alt+Shift+M.'),
+      q || filter !== 'all'
+        ? emptyState('No matches', 'Try a different search or filter.')
+        : emptyState('No marked tabs yet', 'Open the Mark view on any tab, or press ⌥⇧M to color it.'),
     );
     return;
   }
 
+  const counts = new Map();
+  for (const e of entries) counts.set(e.m.colorId || '', (counts.get(e.m.colorId || '') || 0) + 1);
   let lastColor;
   for (const e of entries) {
     const color = colorById(cfg, e.m.colorId);
@@ -382,6 +447,7 @@ async function renderList() {
           { class: 'group-head' },
           color ? el('span', { class: 'swatch', style: `background:${cssFill(color)}` }) : null,
           color ? color.name : 'No color',
+          el('span', { class: 'n' }, `· ${counts.get(key)}`),
         ),
       );
     }
@@ -398,7 +464,7 @@ async function renderList() {
             window.close();
           },
         },
-        el('img', { src: e.t.favIconUrl || '../../icons/icon16.png', alt: '' }),
+        el('img', { src: e.t.favIconUrl || faviconFor(e.t.url), alt: '' }),
         el(
           'div',
           { class: 'item-body' },
@@ -407,8 +473,8 @@ async function renderList() {
             ? el(
                 'div',
                 { class: 'item-meta' },
-                label ? el('span', { class: 'item-label ellipsis' }, `${label.emoji ? label.emoji + ' ' : ''}${label.text}`) : null,
-                note ? el('span', { class: 'item-note ellipsis' }, `📝 ${note}`) : null,
+                label ? el('span', { class: 'item-label ellipsis' }, ...labelContent(label.emoji, label.text)) : null,
+                note ? el('span', { class: 'item-note ellipsis' }, ...labelContent('📝', note)) : null,
               )
             : null,
         ),
@@ -416,7 +482,7 @@ async function renderList() {
           'button',
           {
             class: 'icon-btn',
-            title: e.m.note?.trim() ? 'Remove color & label (keeps the note)' : 'Remove mark',
+            title: e.m.note?.trim() ? 'Unmark (keeps the note)' : 'Unmark',
             onclick: (ev) => {
               ev.stopPropagation();
               chrome.runtime.sendMessage({ type: 'tm:removeMark', tabId: e.id });
@@ -430,7 +496,7 @@ async function renderList() {
 }
 
 // ---------------------------------------------------------------------------
-// Recently closed marked tabs (restore pool)
+// Tabs view: recently closed (restore pool)
 
 function relTime(ts) {
   const s = Math.max(0, (Date.now() - ts) / 1000);
@@ -450,23 +516,18 @@ async function renderClosed() {
       return [e.title, e.url, label?.text, e.note].join(' ').toLowerCase().includes(q);
     });
   }
-  $('#closed-count').textContent = entries.length ? entries.length : '';
-  const box = $('#closed');
-  box.replaceChildren();
-  if (!entries.length) {
-    box.append(el('div', { class: 'empty' }, q ? 'No matching closed tabs.' : 'Closed tabs with marks or notes show up here.'));
-    return;
-  }
-  for (const e of entries.slice(0, 30)) {
-    const label = resolveLabel(e, cfg);
-    const color = colorById(cfg, e.colorId);
-    const note = (e.note || '').trim().replace(/\s+/g, ' ');
-    box.append(
-      el(
+  $('#closed-wrap').hidden = !entries.length;
+  $('#closed-count').textContent = entries.length > 30 ? `· 30 of ${entries.length}` : `· ${entries.length}`;
+  $('#closed').replaceChildren(
+    ...entries.slice(0, 30).map((e) => {
+      const label = resolveLabel(e, cfg);
+      const color = colorById(cfg, e.colorId);
+      const note = (e.note || '').trim().replace(/\s+/g, ' ');
+      return el(
         'div',
         {
           class: 'item',
-          title: `Restore with its mark and note\n${e.title || ''}\n${e.url}${note ? '\n\n📝 ' + e.note : ''}`,
+          title: `Reopen with its mark and note\n${e.title || ''}\n${e.url}${note ? '\n\n📝 ' + e.note : ''}`,
           onclick: async () => {
             await chrome.runtime.sendMessage({ type: 'tm:restoreClosed', poolId: e.poolId });
             window.close();
@@ -479,15 +540,15 @@ async function renderClosed() {
           el(
             'div',
             { class: 'item-title ellipsis' },
-            color ? el('span', { class: 'swatch', style: `display:inline-block;width:8px;height:8px;margin-right:5px;background:${cssFill(color)}` }) : null,
+            color ? el('span', { class: 'dot', style: `background:${cssFill(color)}` }) : null,
             e.title || e.url,
           ),
           el(
             'div',
             { class: 'item-meta' },
-            el('span', { class: 'when' }, relTime(e.closedAt)),
-            label ? el('span', { class: 'item-label ellipsis' }, `${label.emoji ? label.emoji + ' ' : ''}${label.text}`) : null,
-            note ? el('span', { class: 'item-note ellipsis' }, `📝 ${note}`) : null,
+            el('span', { style: 'flex:none' }, relTime(e.closedAt)),
+            label ? el('span', { class: 'item-label ellipsis' }, ...labelContent(label.emoji, label.text)) : null,
+            note ? el('span', { class: 'item-note ellipsis' }, ...labelContent('📝', note)) : null,
           ),
         ),
         el(
@@ -502,16 +563,16 @@ async function renderClosed() {
           },
           '×',
         ),
-      ),
-    );
-  }
+      );
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------
-// Display settings
+// Settings view
 
 function previewColor() {
-  return colorById(cfg, currentMark()?.colorId) || visibleColors(cfg)[0] || { value: '#5b5bd6' };
+  return colorById(cfg, currentMark()?.colorId) || colorById(cfg, 'blue') || visibleColors(cfg)[0] || { value: '#5b5bd6' };
 }
 
 function renderSettings() {
@@ -521,11 +582,11 @@ function renderSettings() {
 
   $('#icon-styles').replaceChildren(
     ...ICON_STYLES.map((st) => {
-      const canvas = el('canvas', { width: 40, height: 40 });
+      const canvas = el('canvas', { width: 44, height: 44 });
       drawMarkedIcon(
         canvas.getContext('2d'),
         { bitmap: null, letter: 'G', color, style: st.id, symbol: s.symbol, emoji: label?.emoji || '👀' },
-        40,
+        44,
       );
       return el(
         'button',
@@ -551,9 +612,7 @@ function renderSettings() {
 
   const seg = (sel, options, key) =>
     $(sel).replaceChildren(
-      ...options.map((o) =>
-        el('button', { class: s[key] === o.id ? 'on' : '', onclick: () => saveSettings({ [key]: o.id }) }, o.name),
-      ),
+      ...options.map((o) => el('button', { class: s[key] === o.id ? 'on' : '', onclick: () => saveSettings({ [key]: o.id }) }, o.name)),
     );
   seg('#show-on', SHOW_ON, 'showOn');
   seg('#title-marker', TITLE_MARKERS, 'titleMarker');
@@ -573,32 +632,19 @@ function renderSettings() {
 async function renderShortcuts() {
   const cmds = await chrome.commands.getAll();
   const names = {
-    _execute_action: 'open',
-    'cycle-color': 'color',
-    'next-marked': 'next',
-    'toggle-note': 'note',
-    'remove-mark': 'remove',
-    'cycle-pr-status': 'PR status',
+    _execute_action: 'Open TabMarks',
+    'cycle-color': 'Cycle colors',
+    'next-marked': 'Next marked tab',
+    'toggle-note': 'Show / hide note',
+    'remove-mark': 'Unmark tab',
+    'cycle-pr-status': 'Cycle PR status',
   };
-  const parts = [];
-  for (const c of cmds) {
-    if (!names[c.name] || !c.shortcut) continue;
-    parts.push(el('span', {}, el('kbd', {}, c.shortcut), ` ${names[c.name]}`));
+  const box = $('#shortcuts');
+  box.replaceChildren();
+  for (const [name, text] of Object.entries(names)) {
+    const c = cmds.find((x) => x.name === name);
+    box.append(c?.shortcut ? el('kbd', {}, c.shortcut) : el('span', { class: 'unset' }, 'not set'), el('span', {}, text));
   }
-  const footer = $('#shortcuts');
-  footer.replaceChildren();
-  parts.forEach((p, i) => {
-    if (i) footer.append(' · ');
-    footer.append(p);
-  });
-  footer.append(
-    parts.length ? ' · ' : '',
-    el(
-      'button',
-      { class: 'link small', onclick: () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }) },
-      'Edit shortcuts',
-    ),
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -615,14 +661,9 @@ function flushNote() {
 }
 
 function bind() {
+  for (const b of document.querySelectorAll('.views button')) b.addEventListener('click', () => setView(b.dataset.view));
   $('#open-options').addEventListener('click', () => chrome.runtime.openOptionsPage());
-  $('#clear-color').addEventListener('click', () => send('tm:setColor', { colorId: null }));
-  $('#clear-label').addEventListener('click', () => send('tm:setLabel', { labelId: null }));
-  $('#custom-label-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    send('tm:setCustomLabel', { text: $('#custom-label').value });
-    $('#custom-label').blur();
-  });
+  $('#edit-shortcuts').addEventListener('click', () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
   $('#note').addEventListener('input', () => {
     $('#note-status').textContent = 'Saving…';
     clearTimeout(noteTimer);
@@ -632,7 +673,6 @@ function bind() {
   window.addEventListener('pagehide', flushNote);
   document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flushNote());
   $('#note-onpage').addEventListener('change', (e) => send('tm:setNoteHidden', { hidden: !e.target.checked }));
-  $('#remove-mark').addEventListener('click', () => send('tm:removeMark'));
   $('#search').addEventListener('input', () => {
     renderList();
     renderClosed();
@@ -642,12 +682,16 @@ function bind() {
     renderQuick();
   });
   $('#quick').addEventListener('keydown', onQuickKey);
-  $('#closed-section').open = localStorage.getItem('tm.closed') === '1';
-  $('#closed-section').addEventListener('toggle', () => localStorage.setItem('tm.closed', $('#closed-section').open ? '1' : '0'));
+  $('#quick').addEventListener('focus', renderQuick);
+  $('#quick').addEventListener('blur', () => {
+    updateKbdHints();
+    // Let clicks on results land before hiding them.
+    setTimeout(() => {
+      if (document.activeElement !== $('#quick')) $('#quick-results').hidden = true;
+    }, 150);
+  });
   $('#label-in-title').addEventListener('change', (e) => saveSettings({ labelInTitle: e.target.checked }));
   $('#floating-notes').addEventListener('change', (e) => saveSettings({ floatingNotes: e.target.checked }));
-  $('#advanced').open = localStorage.getItem('tm.advanced') === '1';
-  $('#advanced').addEventListener('toggle', () => localStorage.setItem('tm.advanced', $('#advanced').open ? '1' : '0'));
 
   chrome.storage.onChanged.addListener(async (changes, area) => {
     if (area !== 'local') return;
@@ -683,16 +727,16 @@ async function init() {
     if (!markable) $('#restricted').textContent = res?.reason || 'This page can’t be marked.';
   }
   if (!markable && !$('#restricted').textContent) {
-    $('#restricted').textContent = 'Brave doesn’t allow extensions to change this page (browser pages, Web Store, PDF viewer).';
+    $('#restricted').textContent = 'Brave doesn’t let extensions change this page (browser pages, Web Store, PDF viewer).';
   }
   $('#restricted').hidden = markable;
 
-  renderHeader();
+  await renderHeader();
   renderEditor();
   renderSettings();
   renderShortcuts();
   bind();
-  if (markable) $('#quick').focus();
+  setView(markable ? 'mark' : 'tabs');
   await Promise.all([renderList(), renderClosed()]);
 }
 
