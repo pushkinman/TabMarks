@@ -39,6 +39,25 @@ function el(tag, props = {}, ...children) {
   return e;
 }
 
+/**
+ * How a color looks on the tab, so pickers show exactly what you'll get:
+ * its title emoji (🟨, 🩷, 🌊…), the chosen symbol, or a plain swatch.
+ */
+function colorMark(c, px = 12) {
+  const s = cfg.settings;
+  if (s.titleMarker === 'emoji' && c.emoji) {
+    return el('span', { class: 'cm cm-emoji', style: `font-size:${Math.round(px * 1.05)}px` }, c.emoji);
+  }
+  if (s.titleMarker === 'symbol') {
+    const d = px * 2;
+    const canvas = el('canvas', { class: 'cm', width: d, height: d, style: `width:${px}px;height:${px}px` });
+    const ctx = canvas.getContext('2d');
+    drawSymbol(ctx, s.symbol, 0, 0, d, makeFill(ctx, c, 0, 0, d, d));
+    return canvas;
+  }
+  return el('span', { class: 'cm swatch', style: `background:${cssFill(c)};width:${px}px;height:${px}px` });
+}
+
 /** Emoji + text with proper spacing. */
 function labelContent(emoji, text) {
   return [emoji ? el('span', { class: 'emoji' }, emoji) : null, text];
@@ -106,7 +125,7 @@ function renderCurrent() {
       el(
         'span',
         { class: `tag${m.colorSource === 'rule' ? ' rule' : ''}`, title: m.colorSource === 'rule' ? 'Applied by a rule' : null },
-        el('span', { class: 'swatch', style: `background:${cssFill(color)}` }),
+        colorMark(color, 12),
         color.name,
         el('button', { class: 'x', title: 'Remove color', onclick: () => send('tm:setColor', { colorId: null }) }, '×'),
       ),
@@ -178,15 +197,15 @@ function renderQuick() {
       if (it.kind === 'label') {
         const color = colorById(cfg, it.l.colorId);
         body = [
-          el('span', { class: 'swatch', style: color ? `background:${cssFill(color)}` : 'visibility:hidden' }),
+          color ? colorMark(color, 12) : el('span', { class: 'cm swatch', style: 'visibility:hidden' }),
           el('span', { class: 'ellipsis' }, ...labelContent(it.l.emoji, it.l.text)),
           el('span', { class: 'kind' }, it.l.group || 'Label'),
         ];
       } else if (it.kind === 'color') {
-        body = [el('span', { class: 'swatch', style: `background:${cssFill(it.c)}` }), el('span', {}, it.c.name), el('span', { class: 'kind' }, 'Color')];
+        body = [colorMark(it.c, 12), el('span', {}, it.c.name), el('span', { class: 'kind' }, 'Color')];
       } else {
         body = [
-          el('span', { class: 'swatch', style: 'visibility:hidden' }),
+          el('span', { class: 'cm swatch', style: 'visibility:hidden' }),
           el('span', { class: 'ellipsis' }, ...labelContent('🏷️', `Label as “${it.text}”`)),
           el('span', { class: 'kind' }, 'Custom'),
         ];
@@ -287,14 +306,17 @@ function renderColors() {
   const colors = visibleColors(cfg).sort((a, b) => COLOR_ROWS.indexOf(a.group) - COLOR_ROWS.indexOf(b.group));
   box.replaceChildren(
     ...colors.map((c) =>
-      el('button', {
-        class: `swatch${c.id === cur ? ' on' : ''}`,
-        title: `${c.name}${c.emoji ? '  ' + c.emoji : ''}`,
-        'aria-label': c.name,
-        'aria-pressed': String(c.id === cur),
-        style: `background:${cssFill(c)}`,
-        onclick: () => send('tm:setColor', { colorId: c.id === cur ? null : c.id }),
-      }),
+      el(
+        'button',
+        {
+          class: `color-opt${c.id === cur ? ' on' : ''}`,
+          title: c.name,
+          'aria-label': c.name,
+          'aria-pressed': String(c.id === cur),
+          onclick: () => send('tm:setColor', { colorId: c.id === cur ? null : c.id }),
+        },
+        colorMark(c, 20),
+      ),
     ),
   );
 }
@@ -445,7 +467,7 @@ async function renderList() {
         el(
           'div',
           { class: 'group-head' },
-          color ? el('span', { class: 'swatch', style: `background:${cssFill(color)}` }) : null,
+          color ? colorMark(color, 11) : null,
           color ? color.name : 'No color',
           el('span', { class: 'n' }, `· ${counts.get(key)}`),
         ),
@@ -540,7 +562,7 @@ async function renderClosed() {
           el(
             'div',
             { class: 'item-title ellipsis' },
-            color ? el('span', { class: 'dot', style: `background:${cssFill(color)}` }) : null,
+            color ? el('span', { class: 'dot-wrap' }, colorMark(color, 10)) : null,
             e.title || e.url,
           ),
           el(

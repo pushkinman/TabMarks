@@ -182,12 +182,6 @@ section + section {
   border-radius: 7px;
   cursor: pointer;
 }
-.qr .swatch {
-  width: 12px;
-  height: 12px;
-  flex: none;
-  cursor: inherit;
-}
 .qr .kind {
   margin-left: auto;
   font-size: 11px;
@@ -231,11 +225,6 @@ section + section {
 .tag .emoji {
   margin-right: 0;
 }
-.tag .swatch {
-  width: 10px;
-  height: 10px;
-  cursor: default;
-}
 .tag .x {
   border: 0;
   background: none;
@@ -262,33 +251,54 @@ section + section {
 }
 
 /* Colors ------------------------------------------------------------------ */
+/* Each option shows the color exactly as it will appear on the tab (see colorMark). */
 .swatches {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
-  gap: 6px;
+  gap: 2px;
 }
-.swatches .swatch {
-  width: 100%;
-  height: auto;
+.color-opt {
   aspect-ratio: 1;
-  transition: transform 0.12s var(--ease);
+  border: 0;
+  padding: 0;
+  border-radius: 8px;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    transform 0.12s var(--ease);
 }
-.swatches .swatch:hover {
-  transform: scale(1.12);
+.color-opt:hover {
+  background: var(--bg-2);
+  transform: scale(1.1);
 }
-.swatches .swatch.on {
-  box-shadow:
-    0 0 0 2px var(--bg),
-    0 0 0 4px var(--fg);
+.color-opt.on {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
-.swatches .swatch.on::after {
-  content: '';
-  width: 35%;
-  height: 20%;
-  border: solid #fff;
-  border-width: 0 0 2px 2px;
-  transform: translateY(-15%) rotate(-45deg);
-  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.5));
+.color-opt.on:hover {
+  transform: none;
+}
+
+/* Color marker (emoji / symbol / swatch) used everywhere a color is shown */
+.cm {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+}
+.cm-emoji {
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  line-height: 1;
+}
+.cm.swatch {
+  cursor: inherit;
+}
+.dot-wrap {
+  display: inline-flex;
+  vertical-align: -1px;
+  margin-right: 6px;
 }
 
 /* Label groups & chips ---------------------------------------------------- */
@@ -404,11 +414,6 @@ body.kbd-hints .chip .num {
   color: var(--muted);
   margin: 12px 0 3px;
   padding: 0 6px;
-}
-.group-head .swatch {
-  width: 9px;
-  height: 9px;
-  cursor: default;
 }
 .group-head .n {
   font-weight: 500;
