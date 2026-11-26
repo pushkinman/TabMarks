@@ -3,6 +3,7 @@
 
 import { DEFAULT_LABELS, DEFAULT_SETTINGS, PR_GROUP, RESTORE_POOL_MAX, RESTORE_POOL_TTL_MS } from '../lib/constants.js';
 import {
+  allColors,
   colorById,
   cssFill,
   cssSolid,
@@ -61,12 +62,13 @@ async function initSession() {
   const { marks = {}, restorePool = [] } = await chrome.storage.local.get(['marks', 'restorePool']);
   const now = Date.now();
   let pool = restorePool.filter((e) => now - (e.closedAt || 0) < RESTORE_POOL_TTL_MS);
-  for (const [tabId, m] of Object.entries(marks)) pool.push({ ...m, oldTabId: Number(tabId), closedAt: now });
+  for (const [tabId, m] of Object.entries(marks)) pushToPool(pool, m, Number(tabId), 'session');
 
   const newMarks = {};
   const tabs = await chrome.tabs.query({});
   for (const tab of tabs) {
-    const m = takeFromPool(pool, tab, true);
+    // Tabs closed one by one are only restored by an explicit reopen, not at startup.
+    const m = takeFromPool(pool, tab, { preferSameId: true, accept: (e) => e.reason !== 'tab' });
     if (m) newMarks[tab.id] = m;
   }
   pool = pool.slice(-RESTORE_POOL_MAX);
@@ -76,13 +78,18 @@ async function initSession() {
   return Object.keys(newMarks).map(Number);
 }
 
-function takeFromPool(pool, tab, preferSameId) {
+function poolEntryToMark(entry, tab, url) {
+  const { oldTabId, closedAt, reason, poolId, ...mark } = entry;
+  return { ...mark, url: url || entry.url, windowId: tab.windowId, index: tab.index };
+}
+
+function takeFromPool(pool, tab, { preferSameId = false, accept = () => true } = {}) {
   const url = tab.pendingUrl || tab.url;
   if (!url) return null;
   let best = -1;
   let bestScore = Infinity;
   pool.forEach((e, i) => {
-    if (e.url !== url) return;
+    if (e.url !== url || !accept(e)) return;
     let score = Math.abs((e.index ?? 0) - (tab.index ?? 0));
     if (preferSameId && e.oldTabId === tab.id) score = -1;
     if (score < bestScore) {
@@ -92,21 +99,52 @@ function takeFromPool(pool, tab, preferSameId) {
   });
   if (best < 0) return null;
   const [entry] = pool.splice(best, 1);
-  const { oldTabId, closedAt, ...mark } = entry;
-  return { ...mark, url, windowId: tab.windowId, index: tab.index };
+  return poolEntryToMark(entry, tab, url);
 }
 
-async function maybeClaim(tab) {
+/** Marks with nothing worth restoring (rule-applied only, no note) aren't pooled. */
+function worthPooling(m) {
+  if (m.note && m.note.trim()) return true;
+  return (m.colorId && m.colorSource !== 'rule') || ((m.labelId || m.customLabel) && m.labelSource !== 'rule');
+}
+
+function pushToPool(pool, m, tabId, reason) {
+  pool.push({ ...m, oldTabId: tabId, closedAt: Date.now(), reason, poolId: `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` });
+  while (pool.length > RESTORE_POOL_MAX) pool.shift();
+}
+
+const REOPEN_WINDOW_MS = 60 * 60 * 1000;
+const restoringNow = new Set(); // URLs being restored from the popup list
+
+/**
+ * Re-attach a pooled mark to a tab that looks like a restored one:
+ * - any tab during startup or in a just-restored window (window/session entries), or
+ * - a tab reopened with Cmd/Ctrl+Shift+T: same URL, same window, ~same position,
+ *   no opener, closed within the last hour (single-tab entries).
+ */
+async function maybeClaim(tab, { onCreate = false } = {}) {
+  const url = tab.pendingUrl || tab.url;
+  if (!url || restoringNow.has(url)) return false;
   const s = await chrome.storage.session.get(['sessionStart', 'freshWindows']);
   const now = Date.now();
   const fresh =
     now - (s.sessionStart || 0) < STARTUP_GRACE_MS ||
     now - ((s.freshWindows || {})[tab.windowId] || 0) < FRESH_WINDOW_MS;
-  if (!fresh) return false;
+  const reopenCandidate = onCreate && !tab.openerTabId;
+  if (!fresh && !reopenCandidate) return false;
+  const accept = (e) => {
+    if (e.reason !== 'tab') return fresh;
+    return (
+      reopenCandidate &&
+      now - e.closedAt < REOPEN_WINDOW_MS &&
+      e.windowId === tab.windowId &&
+      Math.abs((e.index ?? 0) - tab.index) <= 1
+    );
+  };
   const claimed = await serial(async () => {
     const { marks = {}, restorePool = [] } = await chrome.storage.local.get(['marks', 'restorePool']);
     if (marks[tab.id] || !restorePool.length) return false;
-    const m = takeFromPool(restorePool, tab, false);
+    const m = takeFromPool(restorePool, tab, { accept });
     if (!m) return false;
     marks[tab.id] = m;
     await chrome.storage.local.set({ marks, restorePool });
@@ -270,6 +308,86 @@ async function setNoteState(tabId, state) {
   });
 }
 
+/** Show or hide the floating note; opens an empty editor when the tab has no note. */
+async function toggleNote(tabId) {
+  const ok = await pushRender(tabId, { force: true });
+  if (!ok) return false;
+  try {
+    await chrome.tabs.sendMessage(tabId, { type: 'tm:toggleNote' }, { frameId: 0 });
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+/** Reopen a tab from the "Recently closed" list with its mark and note. */
+async function restoreClosed(poolId) {
+  await ensureSession();
+  const entry = await serial(async () => {
+    const { restorePool = [] } = await chrome.storage.local.get('restorePool');
+    const i = restorePool.findIndex((e) => e.poolId === poolId);
+    if (i < 0) return null;
+    const [e] = restorePool.splice(i, 1);
+    await chrome.storage.local.set({ restorePool });
+    return e;
+  });
+  if (!entry) return { ok: false };
+  restoringNow.add(entry.url);
+  let tab = null;
+  try {
+    // Prefer the browser's own session restore (keeps back/forward history).
+    const closed = await chrome.sessions.getRecentlyClosed({ maxResults: 25 });
+    const match = closed.find((s) => s.tab && s.tab.url === entry.url);
+    if (match) tab = (await chrome.sessions.restore(match.tab.sessionId))?.tab || null;
+  } catch {
+    tab = null;
+  }
+  try {
+    if (!tab) tab = await chrome.tabs.create({ url: entry.url, active: true });
+    await serial(async () => {
+      const marks = await getMarksRaw();
+      marks[tab.id] = poolEntryToMark(entry, tab);
+      await chrome.storage.local.set({ marks });
+    });
+  } finally {
+    setTimeout(() => restoringNow.delete(entry.url), 3000);
+  }
+  await chrome.tabs.update(tab.id, { active: true });
+  pushRender(tab.id);
+  return { ok: true, tabId: tab.id };
+}
+
+/** Drop references to labels/colors that no longer exist. */
+async function cleanupStaleRefs() {
+  await ensureSession();
+  const cfg = await loadConfig();
+  const labelIds = new Set(cfg.labels.map((l) => l.id));
+  const colorIds = new Set(allColors(cfg).map((c) => c.id));
+  const changed = await serial(async () => {
+    const marks = await getMarksRaw();
+    const touched = [];
+    for (const [id, m] of Object.entries(marks)) {
+      let dirty = false;
+      if (m.labelId && !labelIds.has(m.labelId)) {
+        m.labelId = null;
+        m.labelSource = null;
+        dirty = true;
+      }
+      if (m.colorId && !colorIds.has(m.colorId)) {
+        m.colorId = null;
+        m.colorSource = null;
+        dirty = true;
+      }
+      if (!dirty) continue;
+      if (isEmptyMark(m)) delete marks[id];
+      touched.push(Number(id));
+    }
+    if (touched.length) await chrome.storage.local.set({ marks });
+    return touched;
+  });
+  for (const id of changed) pushRender(id);
+}
+
 // ---------------------------------------------------------------------------
 // Rules.
 
@@ -346,14 +464,46 @@ function cacheSet(map, key, value, max) {
   if (map.size > max) map.delete(map.keys().next().value);
 }
 
+let offscreenCreating = null;
+async function ensureOffscreen() {
+  if (await chrome.offscreen.hasDocument?.()) return;
+  offscreenCreating ||= chrome.offscreen
+    .createDocument({ url: 'src/offscreen/offscreen.html', reasons: ['DOM_PARSER'], justification: 'Rasterize SVG favicons' })
+    .catch(() => {})
+    .finally(() => (offscreenCreating = null));
+  await offscreenCreating;
+}
+
+/** SVG blob -> ImageBitmap via the offscreen document. */
+async function svgToBitmap(blob) {
+  let text = await blob.text();
+  // Give size-less SVGs an explicit square size so they don't render at 300x150.
+  text = text.replace(/<svg\b([^>]*)>/i, (tag, attrs) =>
+    /\swidth=/i.test(attrs) ? tag : `<svg${attrs} width="64" height="64">`,
+  );
+  const bytes = new TextEncoder().encode(text);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  await ensureOffscreen();
+  const res = await chrome.runtime.sendMessage({ type: 'tm:rasterize', src: `data:image/svg+xml;base64,${btoa(bin)}`, size: 64 });
+  if (!res?.dataUrl) return null;
+  const png = await (await fetch(res.dataUrl)).blob();
+  return createImageBitmap(png);
+}
+
 async function loadBitmap(href) {
   if (bitmapCache.has(href)) return bitmapCache.get(href);
   let bm = null;
   try {
-    const res = await fetch(href, { credentials: 'omit', cache: 'force-cache' });
+    let res = await fetch(href, { credentials: 'omit', cache: 'force-cache' });
+    // Intranet / logged-in sites may only serve the icon with cookies.
+    if (!res.ok && /^https?:/i.test(href)) res = await fetch(href, { credentials: 'include', cache: 'force-cache' });
     if (res.ok) {
       const blob = await res.blob();
-      if (blob.size > 0 && !/svg/i.test(blob.type)) bm = await createImageBitmap(blob);
+      if (blob.size > 0) {
+        const isSvg = /svg/i.test(blob.type) || /\.svg(\?|#|$)/i.test(href) || /^data:image\/svg/i.test(href);
+        bm = isSvg ? await svgToBitmap(blob) : await createImageBitmap(blob).catch(() => svgToBitmap(blob));
+      }
     }
   } catch {
     bm = null;
@@ -364,18 +514,11 @@ async function loadBitmap(href) {
 
 async function sourceIcon(tab, info) {
   for (const h of info?.iconHrefs || []) {
-    if (/^data:image\/svg/i.test(h) || /\.svg(\?|#|$)/i.test(h)) continue;
     const bm = await loadBitmap(h);
     if (bm) return { bitmap: bm, key: h };
   }
-  // Chromium's own favicon cache (also rasterizes SVG favicons).
-  try {
-    const fav = chrome.runtime.getURL(`/_favicon/?pageUrl=${encodeURIComponent(tab.url)}&size=32`);
-    const bm = await loadBitmap(fav);
-    if (bm) return { bitmap: bm, key: fav };
-  } catch {
-    /* favicon API unavailable */
-  }
+  // Note: Chromium's _favicon cache is deliberately not used here: it stores the
+  // already-marked icon, which would produce a ring inside a ring.
   let letter = '•';
   try {
     letter = new URL(tab.url).hostname.replace(/^www\./, '')[0] || '•';
@@ -461,7 +604,7 @@ async function pushRender(tabId, extra = {}) {
   if (!tab || isRestrictedUrl(tab.url) || tab.discarded) return false;
   const mark = (await getMarksRaw())[tabId] || null;
   // Nothing to show: only talk to an already-injected script (to clear old marks).
-  const info = mark || extra.focusNote ? await ensureContent(tabId) : await ping(tabId);
+  const info = mark || extra.focusNote || extra.force ? await ensureContent(tabId) : await ping(tabId);
   if (!info) return false;
   if (mark) await patchMark(tabId, { title: info.title, iconHrefs: info.iconHrefs });
   const cfg = await loadConfig();
@@ -574,6 +717,9 @@ chrome.commands.onCommand.addListener(async (command, tabArg) => {
   else if (command === 'remove-mark') await removeMark(tab.id);
   else if (command === 'next-marked') await jumpToNext(tab);
   else if (command === 'cycle-pr-status') await cyclePrStatus(tab);
+  else if (command === 'toggle-note') {
+    if (!(await toggleNote(tab.id))) flash(tab.id, '✕');
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -634,11 +780,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     await setNoteState(tab.id, { hidden: false, collapsed: false });
     return pushRender(tab.id, { focusNote: true });
   }
-  if (id === 'tm-note-toggle') {
-    const m = (await getMarksRaw())[tab.id];
-    await setNoteState(tab.id, { hidden: !m?.noteHidden });
-    return pushRender(tab.id);
-  }
+  if (id === 'tm-note-toggle') return toggleNote(tab.id);
 });
 
 // ---------------------------------------------------------------------------
@@ -713,6 +855,20 @@ const handlers = {
     await chrome.windows.update(t.windowId, { focused: true });
     return { ok: true };
   },
+  async 'tm:restoreClosed'(msg) {
+    return restoreClosed(msg.poolId);
+  },
+  async 'tm:forgetClosed'(msg) {
+    await serial(async () => {
+      const { restorePool = [] } = await chrome.storage.local.get('restorePool');
+      await chrome.storage.local.set({ restorePool: restorePool.filter((e) => e.poolId !== msg.poolId) });
+    });
+    return { ok: true };
+  },
+  async 'tm:toggleNote'(msg) {
+    await toggleNote(msg.tabId);
+    return { ok: true };
+  },
   async 'tm:openNote'(msg) {
     await setNoteState(msg.tabId, { hidden: false, collapsed: false });
     await pushRender(msg.tabId, { focusNote: true });
@@ -737,7 +893,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 chrome.tabs.onCreated.addListener(async (tab) => {
   await ensureSession();
-  maybeClaim(tab);
+  await maybeClaim(tab, { onCreate: true });
+  refreshIndices(tab.windowId);
 });
 
 chrome.tabs.onUpdated.addListener(async (tabId, change, tab) => {
@@ -758,13 +915,11 @@ chrome.tabs.onRemoved.addListener(async (tabId, info) => {
     const m = marks[tabId];
     if (!m) return;
     delete marks[tabId];
-    if (info.isWindowClosing) {
-      restorePool.push({ ...m, oldTabId: tabId, closedAt: Date.now() });
-      while (restorePool.length > RESTORE_POOL_MAX) restorePool.shift();
-    }
+    if (worthPooling(m)) pushToPool(restorePool, { ...m, windowId: info.windowId }, tabId, info.isWindowClosing ? 'window' : 'tab');
     await chrome.storage.local.set({ marks, restorePool });
   });
   setRuleSuppress(tabId, null);
+  if (!info.isWindowClosing) refreshIndices(info.windowId);
 });
 
 chrome.tabs.onReplaced.addListener(async (addedId, removedId) => {
@@ -779,13 +934,37 @@ chrome.tabs.onReplaced.addListener(async (addedId, removedId) => {
   pushRender(addedId);
 });
 
-chrome.tabs.onMoved.addListener((tabId, info) => {
-  patchMark(tabId, { index: info.toIndex, windowId: info.windowId });
-});
+// Keep stored tab positions current (used to recognise reopened tabs).
+const indexTimers = new Map();
+function refreshIndices(windowId) {
+  if (windowId == null || windowId < 0) return;
+  clearTimeout(indexTimers.get(windowId));
+  indexTimers.set(
+    windowId,
+    setTimeout(async () => {
+      indexTimers.delete(windowId);
+      const tabs = await chrome.tabs.query({ windowId }).catch(() => []);
+      if (!tabs.length) return;
+      await serial(async () => {
+        const marks = await getMarksRaw();
+        let dirty = false;
+        for (const t of tabs) {
+          const m = marks[t.id];
+          if (m && (m.index !== t.index || m.windowId !== t.windowId)) {
+            m.index = t.index;
+            m.windowId = t.windowId;
+            dirty = true;
+          }
+        }
+        if (dirty) await chrome.storage.local.set({ marks });
+      });
+    }, 250),
+  );
+}
 
-chrome.tabs.onAttached.addListener((tabId, info) => {
-  patchMark(tabId, { index: info.newPosition, windowId: info.newWindowId });
-});
+chrome.tabs.onMoved.addListener((tabId, info) => refreshIndices(info.windowId));
+chrome.tabs.onAttached.addListener((tabId, info) => refreshIndices(info.newWindowId));
+chrome.tabs.onDetached.addListener((tabId, info) => refreshIndices(info.oldWindowId));
 
 chrome.windows.onCreated.addListener(async (win) => {
   await ensureSession();
@@ -802,6 +981,7 @@ chrome.windows.onCreated.addListener(async (win) => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   if (changes.labels || changes.customColors || changes.colorPrefs) rebuildMenus();
+  if (changes.labels || changes.customColors) cleanupStaleRefs();
   if (changes.settings || changes.labels || changes.customColors || changes.colorPrefs) rerenderAll();
   if (changes.rules) reapplyRulesAll();
 });

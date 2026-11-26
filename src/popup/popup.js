@@ -55,20 +55,158 @@ function hostOf(url) {
   }
 }
 
-function renderHeader() {
+function faviconFor(url) {
+  return chrome.runtime.getURL(`/_favicon/?pageUrl=${encodeURIComponent(url)}&size=32`);
+}
+
+async function renderHeader() {
+  tab = (await chrome.tabs.get(tab.id).catch(() => null)) || tab;
   const m = currentMark();
   $('#tab-title').textContent = m?.title || tab.title || 'Untitled';
   $('#tab-host').textContent = hostOf(tab.url);
-  const c = $('#tab-icon');
-  const ctx = c.getContext('2d');
-  const color = colorById(cfg, m?.colorId);
-  const label = resolveLabel(m, cfg);
-  const style = label?.def?.iconStyle || cfg.settings.iconStyle;
-  const symbol = label?.def?.symbol || cfg.settings.symbol;
-  let st = style;
-  if (st === 'emoji' && !label?.emoji) st = color ? 'badge' : 'none';
-  if (st !== 'emoji' && !color) st = 'none';
-  drawMarkedIcon(ctx, { bitmap: null, letter: hostOf(tab.url)[0] || '•', color, style: st, symbol, emoji: label?.emoji }, 40);
+  // The tab's live favicon already shows its mark.
+  $('#tab-icon').src = tab.favIconUrl || faviconFor(tab.url);
+}
+
+// ---------------------------------------------------------------------------
+// Quick pick (keyboard-first)
+
+let quickIndex = 0;
+let quickItems = [];
+
+function groupLabels() {
+  return cfg.labels.filter((l) => (l.group || 'General') === activeGroup);
+}
+
+function buildQuickItems(raw) {
+  const q = raw.trim().toLowerCase();
+  if (!q) return [];
+  const score = (s) => {
+    s = (s || '').toLowerCase();
+    if (!s) return 9;
+    if (s.startsWith(q)) return 0;
+    if (s.split(/[\s/-]+/).some((w) => w.startsWith(q))) return 1;
+    if (s.includes(q)) return 2;
+    return 9;
+  };
+  const items = [];
+  for (const l of cfg.labels) {
+    const sc = Math.min(score(l.text), score(l.group) + 1.5, l.emoji && l.emoji === raw.trim() ? 0 : 9);
+    if (sc < 9) items.push({ kind: 'label', sc, l });
+  }
+  for (const c of visibleColors(cfg)) {
+    const sc = score(c.name);
+    if (sc < 9) items.push({ kind: 'color', sc: sc + 0.25, c });
+  }
+  items.sort((a, b) => a.sc - b.sc);
+  items.push({ kind: 'custom', text: raw.trim().slice(0, 60) });
+  return items;
+}
+
+function renderQuick() {
+  const raw = $('#quick').value;
+  quickItems = buildQuickItems(raw);
+  const box = $('#quick-results');
+  box.hidden = !quickItems.length;
+  $('#quick-hint').hidden = !!quickItems.length;
+  if (!quickItems.length) return;
+  quickIndex = Math.min(quickIndex, quickItems.length - 1);
+  box.replaceChildren(
+    ...quickItems.map((it, i) => {
+      let body;
+      if (it.kind === 'label') {
+        const color = colorById(cfg, it.l.colorId);
+        body = [
+          color ? el('span', { class: 'swatch', style: `background:${cssFill(color)}` }) : el('span', { class: 'swatch', style: 'visibility:hidden' }),
+          el('span', { class: 'ellipsis' }, `${it.l.emoji ? it.l.emoji + ' ' : ''}${it.l.text}`),
+          el('span', { class: 'kind' }, it.l.group || 'Label'),
+        ];
+      } else if (it.kind === 'color') {
+        body = [el('span', { class: 'swatch', style: `background:${cssFill(it.c)}` }), el('span', {}, it.c.name), el('span', { class: 'kind' }, 'Color')];
+      } else {
+        body = [el('span', { class: 'swatch', style: 'visibility:hidden' }), el('span', { class: 'ellipsis' }, `🏷️ Use “${it.text}” as label`), el('span', { class: 'kind' }, 'Custom')];
+      }
+      return el(
+        'div',
+        {
+          class: `qr${i === quickIndex ? ' active' : ''}`,
+          onmousemove: () => {
+            if (quickIndex !== i) {
+              quickIndex = i;
+              renderQuick();
+            }
+          },
+          onclick: (e) => applyQuick(it, e.shiftKey),
+        },
+        ...body,
+      );
+    }),
+  );
+  box.children[quickIndex]?.scrollIntoView({ block: 'nearest' });
+}
+
+async function applyQuick(it, keepOpen) {
+  if (it.kind === 'label') await send('tm:setLabel', { labelId: it.l.id });
+  else if (it.kind === 'color') await send('tm:setColor', { colorId: it.c.id });
+  else if (it.text) await send('tm:setCustomLabel', { text: it.text });
+  if (keepOpen) {
+    $('#quick').value = '';
+    renderQuick();
+  } else {
+    window.close();
+  }
+}
+
+async function onQuickKey(e) {
+  const q = $('#quick').value;
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    if (q) {
+      $('#quick').value = '';
+      renderQuick();
+    } else window.close();
+    return;
+  }
+  if (!q) {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Backspace') {
+      e.preventDefault();
+      await send('tm:removeMark');
+      return;
+    }
+    const digit = /^Digit([0-9])$/.exec(e.code);
+    if (digit && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      const n = Number(digit[1]);
+      if (n === 0) {
+        await send('tm:setLabel', { labelId: null });
+        return;
+      }
+      const l = groupLabels()[n - 1];
+      if (!l) return;
+      await send('tm:setLabel', { labelId: l.id });
+      if (!e.shiftKey) window.close();
+      return;
+    }
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const groups = labelGroups(cfg.labels).map((g) => g.name);
+      const i = groups.indexOf(activeGroup);
+      activeGroup = groups[(i + (e.key === 'ArrowRight' ? 1 : -1) + groups.length) % groups.length];
+      localStorage.setItem('tm.group', activeGroup);
+      renderLabels();
+    }
+    return;
+  }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const d = e.key === 'ArrowDown' ? 1 : -1;
+    quickIndex = (quickIndex + d + quickItems.length) % quickItems.length;
+    renderQuick();
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    const it = quickItems[quickIndex];
+    if (it) applyQuick(it, e.shiftKey);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -122,23 +260,26 @@ function renderLabels() {
   const box = $('#labels');
   box.replaceChildren();
   const group = groups.find((g) => g.name === activeGroup);
-  for (const l of group?.labels || []) {
+  (group?.labels || []).forEach((l, i) => {
     const color = colorById(cfg, l.colorId);
     const on = m?.labelId === l.id;
+    const tip = [i < 9 ? `Key ${i + 1}` : null, color ? `also sets color: ${color.name}` : null].filter(Boolean).join(' · ');
     box.append(
       el(
         'button',
         {
           class: `chip${on ? ' on' : ''}`,
           style: color ? `--chip-color:${cssSolid(color)}` : null,
-          title: color ? `Also sets color: ${color.name}` : null,
+          title: tip || null,
           onclick: () => send('tm:setLabel', { labelId: on ? null : l.id }),
         },
         color ? el('span', { class: 'dot', style: `background:${cssFill(color)}` }) : null,
-        `${l.emoji ? l.emoji + ' ' : ''}${l.text}`,
+        l.emoji ? el('span', { class: 'emoji' }, l.emoji) : null,
+        l.text,
+        i < 9 ? el('span', { class: 'num' }, String(i + 1)) : null,
       ),
     );
-  }
+  });
   const input = $('#custom-label');
   if (document.activeElement !== input) input.value = m?.customLabel || '';
 }
@@ -289,6 +430,84 @@ async function renderList() {
 }
 
 // ---------------------------------------------------------------------------
+// Recently closed marked tabs (restore pool)
+
+function relTime(ts) {
+  const s = Math.max(0, (Date.now() - ts) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+  return `${Math.round(s / 86400)}d ago`;
+}
+
+async function renderClosed() {
+  const { restorePool = [] } = await chrome.storage.local.get('restorePool');
+  const q = $('#search').value.trim().toLowerCase();
+  let entries = restorePool.filter((e) => e.poolId).sort((a, b) => b.closedAt - a.closedAt);
+  if (q) {
+    entries = entries.filter((e) => {
+      const label = resolveLabel(e, cfg);
+      return [e.title, e.url, label?.text, e.note].join(' ').toLowerCase().includes(q);
+    });
+  }
+  $('#closed-count').textContent = entries.length ? entries.length : '';
+  const box = $('#closed');
+  box.replaceChildren();
+  if (!entries.length) {
+    box.append(el('div', { class: 'empty' }, q ? 'No matching closed tabs.' : 'Closed tabs with marks or notes show up here.'));
+    return;
+  }
+  for (const e of entries.slice(0, 30)) {
+    const label = resolveLabel(e, cfg);
+    const color = colorById(cfg, e.colorId);
+    const note = (e.note || '').trim().replace(/\s+/g, ' ');
+    box.append(
+      el(
+        'div',
+        {
+          class: 'item',
+          title: `Restore with its mark and note\n${e.title || ''}\n${e.url}${note ? '\n\n📝 ' + e.note : ''}`,
+          onclick: async () => {
+            await chrome.runtime.sendMessage({ type: 'tm:restoreClosed', poolId: e.poolId });
+            window.close();
+          },
+        },
+        el('img', { src: faviconFor(e.url), alt: '' }),
+        el(
+          'div',
+          { class: 'item-body' },
+          el(
+            'div',
+            { class: 'item-title ellipsis' },
+            color ? el('span', { class: 'swatch', style: `display:inline-block;width:8px;height:8px;margin-right:5px;background:${cssFill(color)}` }) : null,
+            e.title || e.url,
+          ),
+          el(
+            'div',
+            { class: 'item-meta' },
+            el('span', { class: 'when' }, relTime(e.closedAt)),
+            label ? el('span', { class: 'item-label ellipsis' }, `${label.emoji ? label.emoji + ' ' : ''}${label.text}`) : null,
+            note ? el('span', { class: 'item-note ellipsis' }, `📝 ${note}`) : null,
+          ),
+        ),
+        el(
+          'button',
+          {
+            class: 'icon-btn',
+            title: 'Forget',
+            onclick: (ev) => {
+              ev.stopPropagation();
+              chrome.runtime.sendMessage({ type: 'tm:forgetClosed', poolId: e.poolId });
+            },
+          },
+          '×',
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Display settings
 
 function previewColor() {
@@ -353,7 +572,14 @@ function renderSettings() {
 
 async function renderShortcuts() {
   const cmds = await chrome.commands.getAll();
-  const names = { 'cycle-color': 'color', 'next-marked': 'next', 'remove-mark': 'remove', 'cycle-pr-status': 'PR status' };
+  const names = {
+    _execute_action: 'open',
+    'cycle-color': 'color',
+    'next-marked': 'next',
+    'toggle-note': 'note',
+    'remove-mark': 'remove',
+    'cycle-pr-status': 'PR status',
+  };
   const parts = [];
   for (const c of cmds) {
     if (!names[c.name] || !c.shortcut) continue;
@@ -407,7 +633,17 @@ function bind() {
   document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flushNote());
   $('#note-onpage').addEventListener('change', (e) => send('tm:setNoteHidden', { hidden: !e.target.checked }));
   $('#remove-mark').addEventListener('click', () => send('tm:removeMark'));
-  $('#search').addEventListener('input', renderList);
+  $('#search').addEventListener('input', () => {
+    renderList();
+    renderClosed();
+  });
+  $('#quick').addEventListener('input', () => {
+    quickIndex = 0;
+    renderQuick();
+  });
+  $('#quick').addEventListener('keydown', onQuickKey);
+  $('#closed-section').open = localStorage.getItem('tm.closed') === '1';
+  $('#closed-section').addEventListener('toggle', () => localStorage.setItem('tm.closed', $('#closed-section').open ? '1' : '0'));
   $('#label-in-title').addEventListener('change', (e) => saveSettings({ labelInTitle: e.target.checked }));
   $('#floating-notes').addEventListener('change', (e) => saveSettings({ floatingNotes: e.target.checked }));
   $('#advanced').open = localStorage.getItem('tm.advanced') === '1';
@@ -416,21 +652,25 @@ function bind() {
   chrome.storage.onChanged.addListener(async (changes, area) => {
     if (area !== 'local') return;
     if (changes.marks) marks = changes.marks.newValue || {};
-    if (Object.keys(changes).some((k) => k !== 'marks' && k !== 'restorePool')) {
+    const cfgChanged = Object.keys(changes).some((k) => k !== 'marks' && k !== 'restorePool');
+    if (cfgChanged) {
       cfg = await loadConfig();
       applyTheme(document, cfg.settings.theme);
       renderSettings();
     }
+    if (changes.restorePool || cfgChanged) renderClosed();
+    if (!changes.marks && !cfgChanged) return;
     renderHeader();
     renderEditor();
     renderList();
+    if ($('#quick').value) renderQuick();
   });
 }
 
 async function init() {
   // ?tabId= lets the popup be opened as a normal page for a specific tab (dev/testing).
   const forced = Number(new URLSearchParams(location.search).get('tabId'));
-  tab = forced ? await chrome.tabs.get(forced) : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
+  tab = (forced && (await chrome.tabs.get(forced).catch(() => null))) || (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
   cfg = await loadConfig();
   marks = await getMarks();
   applyTheme(document, cfg.settings.theme);
@@ -452,7 +692,8 @@ async function init() {
   renderSettings();
   renderShortcuts();
   bind();
-  await renderList();
+  if (markable) $('#quick').focus();
+  await Promise.all([renderList(), renderClosed()]);
 }
 
 init();

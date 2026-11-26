@@ -358,6 +358,7 @@ function status(text) {
 
 async function exportJson() {
   const marks = await getMarks();
+  const { restorePool = [] } = await chrome.storage.local.get('restorePool');
   const tabs = await chrome.tabs.query({});
   const byId = new Map(tabs.map((t) => [t.id, t]));
   const notes = Object.entries(marks)
@@ -373,6 +374,15 @@ async function exportJson() {
     customColors: cfg.customColors,
     colorPrefs: cfg.colorPrefs,
     openTabsSnapshot: notes,
+    closedTabsSnapshot: restorePool.map((e) => ({
+      url: e.url,
+      title: e.title,
+      colorId: e.colorId,
+      labelId: e.labelId,
+      customLabel: e.customLabel,
+      note: e.note,
+      closedAt: new Date(e.closedAt).toISOString(),
+    })),
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = el('a', { href: URL.createObjectURL(blob), download: `tabmarks-backup-${new Date().toISOString().slice(0, 10)}.json` });

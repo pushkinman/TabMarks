@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TabMarks",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Color, label and annotate individual tabs with emojis, icons and notes. Built for PR-heavy dev workflows.",
   "icons": {
     "16": "icons/icon16.png",
@@ -22,27 +22,56 @@
     "service_worker": "src/background/sw.js",
     "type": "module"
   },
-  "permissions": ["storage", "tabs", "contextMenus", "scripting", "favicon"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": [
+    "storage",
+    "tabs",
+    "contextMenus",
+    "scripting",
+    "favicon",
+    "sessions",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["src/content/content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/content/content.js"
+      ],
       "run_at": "document_end"
     }
   ],
   "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+L"
+      },
+      "description": "Open TabMarks (quick label)"
+    },
     "cycle-color": {
-      "suggested_key": { "default": "Alt+Shift+M" },
+      "suggested_key": {
+        "default": "Alt+Shift+M"
+      },
       "description": "Mark tab / cycle through colors"
     },
-    "remove-mark": {
-      "suggested_key": { "default": "Alt+Shift+X" },
-      "description": "Remove color and label from this tab"
-    },
     "next-marked": {
-      "suggested_key": { "default": "Alt+Shift+N" },
+      "suggested_key": {
+        "default": "Alt+Shift+N"
+      },
       "description": "Jump to next marked tab (same color if this tab is marked)"
+    },
+    "toggle-note": {
+      "suggested_key": {
+        "default": "Alt+Shift+O"
+      },
+      "description": "Show / hide this tab's note on the page (opens an empty note if none)"
+    },
+    "remove-mark": {
+      "description": "Remove color and label from this tab"
     },
     "cycle-pr-status": {
       "description": "Cycle pull request status label"

@@ -15,7 +15,10 @@ After editing the code, click the reload icon on the TabMarks card in `brave://e
 
 ### Marking a tab
 A mark is a **color**, an optional **label** and an optional **note**. You can mark a tab three ways:
-- **Toolbar popup**: a color palette, label chips grouped by General, Pull requests and Work, a custom label field, and a note box.
+- **Toolbar popup** (`Alt+Shift+L`): a color palette, label chips grouped by General, Pull requests and Work, a custom label field, and a note box. The popup opens with a quick-pick box focused:
+  - Type a few letters, then press `Enter` to apply the top match and close the popup. `Shift+Enter` applies it and keeps the popup open. Use `↑`/`↓` to move through matches. If nothing matches, Enter sets what you typed as a custom label.
+  - With the box empty, `1`–`9` applies that label from the current group, `0` clears the label, `←`/`→` switch groups, and `⌘⌫` removes the color and label.
+  - `Esc` clears the box, or closes the popup if the box is already empty.
 - **Right-click a page → TabMarks**: color, label groups, add or edit the note, show or hide the note, remove.
 - **Keyboard shortcuts**: listed below.
 
@@ -53,6 +56,7 @@ A mark is a **color**, an optional **label** and an optional **note**. You can m
 
 ### Notes
 - Type a note in the popup. It also appears as a **floating sticky note** on the page, which you can drag, collapse or hide, and edit inline.
+- `Alt+Shift+O` shows or hides the current tab's note. On a tab without a note, it opens an empty note ready to type into. It works even when floating notes are turned off.
 - Page keyboard shortcuts (such as GitHub hotkeys) are blocked while you type in the note.
 - Turn floating notes off globally under Display settings, or per tab with "Show on page".
 
@@ -68,10 +72,11 @@ A mark is a **color**, an optional **label** and an optional **note**. You can m
 - A color you pick by hand always overrides a rule.
 - Removing a rule-applied mark keeps it off until the page navigates.
 
-### Restore
+### Restore & recently closed
 - Marks and notes come back after a **browser restart** or when you **reopen a closed window**. They are matched by URL and tab position.
-- A brand-new tab with the same URL starts clean.
-- A single tab closed on its own drops its mark.
+- A tab reopened with **`⌘⇧T`** (within an hour, in the same window and position) gets its mark and note back.
+- The popup's **Recently closed** list keeps closed tabs that had a mark or note, for up to 14 days. It's searchable. Click an entry to reopen the tab with its mark, or click × to forget it.
+- A brand-new tab with the same URL still starts clean.
 
 ### Customization (⚙ in the popup → Rules & colors)
 - Rules
@@ -84,16 +89,20 @@ A mark is a **color**, an optional **label** and an optional **note**. You can m
 
 | Shortcut | Action |
 |---|---|
+| `Alt+Shift+L` | Open the TabMarks popup (quick label) |
 | `Alt+Shift+M` | Mark the tab / cycle through colors |
 | `Alt+Shift+N` | Jump to the next marked tab (same color if the current tab is marked) |
-| `Alt+Shift+X` | Remove color and label (the note is kept) |
+| `Alt+Shift+O` | Show / hide this tab's note on the page |
+| *(unassigned)* | Remove color and label (the note is kept); also `⌘⌫` in the popup |
 | *(unassigned)* | Cycle PR status label |
+
+Chrome gives an extension at most 4 default shortcuts, so the last two start unassigned.
 
 On macOS, Alt is ⌥ (Option). You can change any shortcut at `brave://extensions/shortcuts`.
 
 ## Limits
 - Browsers don't let extensions touch `brave://` and `chrome://` pages, the Web Store, or the built-in PDF viewer. TabMarks says so when you try to mark one.
-- Favicons that exist only as SVG fall back to the browser's cached favicon, then to a letter icon.
+- SVG favicons are rasterized in an offscreen page. If a site's favicon can't be fetched at all, a letter icon is used instead.
 - Everything is stored locally in `chrome.storage.local`. There is no sync, no account and no analytics. The only network requests are fetches of the site's own favicon.
 
 ## Project layout
@@ -104,6 +113,7 @@ src/background/sw.js      service worker: mark state, rules, restore, favicon re
 src/content/content.js    title prefix, favicon swap, floating note (shadow DOM)
 src/popup/                toolbar popup
 src/options/              Rules & colors page
+src/offscreen/            rasterizes SVG favicons (service workers can't decode SVG)
 src/lib/                  shared constants, storage helpers, rules, symbols, favicon renderer
 src/ui/base.css           shared styles
 scripts/make-icons.py     regenerates icons/ (pure Python)

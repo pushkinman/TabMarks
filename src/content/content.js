@@ -413,6 +413,28 @@
     if (S.host) S.host.style.display = 'none';
   }
 
+  function noteVisible() {
+    return !!S.host && S.host.isConnected && S.host.style.display !== 'none';
+  }
+
+  // Shortcut / menu: show the note (or an empty editor), or hide it.
+  function toggleNote() {
+    if (!S.note) return;
+    if (noteVisible()) {
+      saveNote();
+      S.editing = false;
+      S.note.hidden = true;
+      S.ui?.ta.blur();
+      hideNote();
+      if (S.note.text.trim()) send({ type: 'tm:noteState', hidden: true });
+      return;
+    }
+    const wasHidden = S.note.hidden;
+    // Works even when floating notes are turned off globally.
+    renderNote({ ...S.note, hidden: false, enabled: true }, !S.note.text.trim());
+    if (wasHidden && S.note.text.trim()) send({ type: 'tm:noteState', hidden: false });
+  }
+
   function isDark(theme) {
     if (theme === 'dark') return true;
     if (theme === 'light') return false;
@@ -493,6 +515,9 @@
       sendResponse(info());
     } else if (msg.type === 'tm:render') {
       apply(msg);
+      sendResponse({ ok: true });
+    } else if (msg.type === 'tm:toggleNote') {
+      toggleNote();
       sendResponse({ ok: true });
     }
   }

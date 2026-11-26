@@ -8,7 +8,7 @@
   </head>
   <body>
     <header class="top">
-      <canvas id="tab-icon" width="40" height="40"></canvas>
+      <img id="tab-icon" alt="" />
       <div class="tab-info">
         <div id="tab-title" class="ellipsis"></div>
         <div id="tab-host" class="ellipsis muted"></div>
@@ -19,6 +19,22 @@
     <div id="restricted" class="notice" hidden></div>
 
     <main id="editor">
+      <section class="quick">
+        <input
+          id="quick"
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="Type a label or color…"
+          aria-label="Quick pick a label or color"
+        />
+        <div id="quick-results" hidden></div>
+        <div id="quick-hint" class="muted small">
+          <kbd>↵</kbd> apply · <kbd>1</kbd>–<kbd>9</kbd> label · <kbd>←</kbd><kbd>→</kbd> group · <kbd>0</kbd> clear
+          label · <kbd>⌘⌫</kbd> remove · <kbd>Esc</kbd> close
+        </div>
+      </section>
+
       <section>
         <div class="section-head">
           <h2>Color</h2>
@@ -61,6 +77,11 @@
       <div id="filters" class="seg small"></div>
       <div id="list"></div>
     </section>
+
+    <details id="closed-section">
+      <summary>Recently closed <span id="closed-count" class="muted"></span></summary>
+      <div id="closed"></div>
+    </details>
 
     <details id="advanced">
       <summary>Display settings</summary>
