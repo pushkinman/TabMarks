@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>TabMarks – Rules &amp; colors</title>
+    <link rel="icon" href="../../icons/icon32.png" />
+    <link rel="stylesheet" href="../ui/base.css" />
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="page-head">
+        <img src="../../icons/icon48.png" alt="" width="32" height="32" />
+        <div>
+          <h1>TabMarks</h1>
+          <div class="muted">Rules, labels, colors, shortcuts &amp; backup</div>
+        </div>
+        <nav>
+          <a href="#rules">Rules</a>
+          <a href="#labels">Labels</a>
+          <a href="#colors">Colors</a>
+          <a href="#shortcuts">Shortcuts</a>
+          <a href="#backup">Backup</a>
+        </nav>
+      </header>
+
+      <section id="rules" class="card">
+        <div class="card-head">
+          <div>
+            <h2>Rules</h2>
+            <p class="muted">
+              Automatically mark tabs by site. The domain can include a path (e.g. <code>github.com/my-org</code>); the
+              optional keyword must appear in the URL or page title. First matching rule wins. A color you pick by hand
+              always overrides a rule.
+            </p>
+          </div>
+          <button id="add-rule" class="btn primary">Add rule</button>
+        </div>
+        <div class="table" id="rules-table"></div>
+      </section>
+
+      <section id="labels" class="card">
+        <div class="card-head">
+          <div>
+            <h2>Quick labels</h2>
+            <p class="muted">
+              Shown in the popup and right-click menu, grouped. A label's color is applied automatically when you pick
+              the label (unless you chose a color by hand). Icon style / symbol override the global display setting for
+              tabs with that label. The <b>Pull requests</b> group is what the “Cycle PR status” shortcut steps through.
+            </p>
+          </div>
+          <div class="row">
+            <button id="reset-labels" class="btn">Reset to defaults</button>
+            <button id="add-label" class="btn primary">Add label</button>
+          </div>
+        </div>
+        <div id="labels-box"></div>
+        <datalist id="group-names"></datalist>
+      </section>
+
+      <section id="colors" class="card">
+        <div class="card-head">
+          <div>
+            <h2>Colors</h2>
+            <p class="muted">Edit the emoji used in the tab title for each color, hide colors you don't use, or add your own.</p>
+          </div>
+          <button id="add-color" class="btn primary">Add custom color</button>
+        </div>
+        <div id="builtin-colors" class="color-grid"></div>
+        <h3>Custom colors</h3>
+        <div id="custom-colors"></div>
+      </section>
+
+      <section id="shortcuts" class="card">
+        <div class="card-head">
+          <div>
+            <h2>Keyboard shortcuts</h2>
+            <p class="muted">Change these in Brave at <code>brave://extensions/shortcuts</code>.</p>
+          </div>
+          <button id="open-shortcuts" class="btn">Edit shortcuts</button>
+        </div>
+        <div id="shortcut-list"></div>
+      </section>
+
+      <section id="backup" class="card">
+        <div class="card-head">
+          <div>
+            <h2>Backup</h2>
+            <p class="muted">
+              Export rules, labels, colors and settings (plus a read-only snapshot of your current notes) to JSON, or
+              import a previous export. Everything is stored locally in this browser only.
+            </p>
+          </div>
+        </div>
+        <div class="row">
+          <button id="export" class="btn">Export JSON</button>
+          <label class="btn">Import JSON<input id="import" type="file" accept="application/json,.json" hidden /></label>
+          <button id="reset-all" class="btn danger">Reset all settings</button>
+          <span id="backup-status" class="muted"></span>
+        </div>
+      </section>
+    </div>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

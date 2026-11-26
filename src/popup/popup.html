@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>TabMarks</title>
+    <link rel="stylesheet" href="../ui/base.css" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="top">
+      <canvas id="tab-icon" width="40" height="40"></canvas>
+      <div class="tab-info">
+        <div id="tab-title" class="ellipsis"></div>
+        <div id="tab-host" class="ellipsis muted"></div>
+      </div>
+      <button id="open-options" class="icon-btn" title="Rules & colors">⚙</button>
+    </header>
+
+    <div id="restricted" class="notice" hidden></div>
+
+    <main id="editor">
+      <section>
+        <div class="section-head">
+          <h2>Color</h2>
+          <button id="clear-color" class="link">None</button>
+        </div>
+        <div id="colors" class="swatches"></div>
+      </section>
+
+      <section>
+        <div class="section-head">
+          <h2>Label</h2>
+          <button id="clear-label" class="link">Clear</button>
+        </div>
+        <div id="label-groups" class="seg"></div>
+        <div id="labels" class="chips"></div>
+        <form id="custom-label-form" class="inline-form">
+          <input id="custom-label" type="text" maxlength="60" placeholder="Custom label…" autocomplete="off" />
+          <button type="submit" class="btn">Set</button>
+        </form>
+      </section>
+
+      <section>
+        <div class="section-head">
+          <h2>Note</h2>
+          <label class="check"><input type="checkbox" id="note-onpage" /> Show on page</label>
+        </div>
+        <textarea id="note" rows="3" placeholder="Notes for this tab… (saved automatically)"></textarea>
+        <div class="row space">
+          <span id="note-status" class="muted small"></span>
+          <button id="remove-mark" class="btn danger">Remove color &amp; label</button>
+        </div>
+      </section>
+    </main>
+
+    <section id="list-section">
+      <div class="section-head">
+        <h2>Marked tabs <span id="count" class="muted"></span></h2>
+      </div>
+      <input id="search" type="search" placeholder="Search title, label, note or URL" autocomplete="off" />
+      <div id="filters" class="seg small"></div>
+      <div id="list"></div>
+    </section>
+
+    <details id="advanced">
+      <summary>Display settings</summary>
+      <div class="setting">
+        <div class="setting-name">Icon style</div>
+        <div id="icon-styles" class="style-grid"></div>
+      </div>
+      <div class="setting">
+        <div class="setting-name">Symbol <span class="muted small">(Symbol icon style &amp; title marker)</span></div>
+        <div id="symbols" class="symbol-grid"></div>
+      </div>
+      <div class="setting">
+        <div class="setting-name">Show mark on</div>
+        <div id="show-on" class="seg"></div>
+      </div>
+      <div class="setting">
+        <div class="setting-name">Title marker</div>
+        <div id="title-marker" class="seg"></div>
+      </div>
+      <div class="setting">
+        <label class="check"><input type="checkbox" id="label-in-title" /> Show label in tab title</label>
+        <label class="check"><input type="checkbox" id="floating-notes" /> Show notes floating on pages</label>
+      </div>
+      <div class="setting">
+        <div class="setting-name">Theme</div>
+        <div id="theme" class="seg"></div>
+      </div>
+    </details>
+
+    <footer id="shortcuts" class="muted small"></footer>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
