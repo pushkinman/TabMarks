@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/pushkinman/TabMarks/archive/refs/heads/main.zip"><img src="https://img.shields.io/badge/download-v1.3.0-5b5bd6" alt="Download v1.3.0"></a>
+  <a href="https://github.com/pushkinman/TabMarks/releases/latest"><img src="https://img.shields.io/github/v/release/pushkinman/TabMarks?label=download&color=5b5bd6" alt="Latest release"></a>
   <img src="https://img.shields.io/badge/Brave%20%C2%B7%20Chrome%20%C2%B7%20Edge-Chromium-fb542b?logo=brave&logoColor=white" alt="Brave, Chrome, Edge">
   <img src="https://img.shields.io/badge/Manifest-V3-3c6df0" alt="Manifest V3">
   <img src="https://img.shields.io/badge/data-stays%20local-1f883d" alt="Data stays local">
@@ -18,7 +18,8 @@
 </p>
 
 <p align="center">
-  <a href="#install"><b>⬇ Install</b></a>
+  <a href="https://github.com/pushkinman/TabMarks/releases/latest"><b>⬇ Download the latest version</b></a>
+  &nbsp;·&nbsp; <a href="#install">Install</a>
   &nbsp;·&nbsp; <a href="#how-to-use">How to use</a>
   &nbsp;·&nbsp; <a href="#features">Features</a>
   &nbsp;·&nbsp; <a href="#keyboard-shortcuts">Shortcuts</a>
@@ -39,14 +40,14 @@ TabMarks marks **the tab itself** and leaves your tab order alone. Give a tab a 
 
 TabMarks isn't on the Chrome Web Store, so you load it from this repository. It takes a minute:
 
-1. Get the code. Either clone it (recommended, because updating is then one `git pull`):
+1. Download **`TabMarks-1.3.0.zip`** from the [latest release](https://github.com/pushkinman/TabMarks/releases/latest) and unzip it somewhere permanent, not Downloads. The browser loads the extension from that folder every time it starts.
+   Or clone the repository, which makes updating a single `git pull`:
    ```bash
    git clone https://github.com/pushkinman/TabMarks.git
    ```
-   or [download the ZIP](https://github.com/pushkinman/TabMarks/archive/refs/heads/main.zip) and unzip it somewhere permanent (not Downloads).
 2. Open `brave://extensions`, or `chrome://extensions` in Chrome or `edge://extensions` in Edge.
 3. Turn on **Developer mode** (top right).
-4. Click **Load unpacked** and select the folder that contains `manifest.json`.
+4. Click **Load unpacked** and select the `TabMarks` folder (the one that contains `manifest.json`).
 5. Pin TabMarks from the toolbar's extensions menu, then press **Alt+Shift+L** (⌥⇧L on a Mac) on any page.
 
 Developed and tested in Brave. Any Chromium browser with Manifest V3 should work.
@@ -177,7 +178,7 @@ On a Mac, Alt is ⌥ Option. Chrome allows an extension only four default shortc
 
 Your marks, notes, labels, rules and settings are stored by the browser for the extension's ID, separately from the code, so updating the code never touches them.
 
-- **To update:** run `git pull` in the folder (or unzip the new version over the old folder), then click ⟳ on TabMarks in `brave://extensions`. Open tabs keep their marks.
+- **To update:** run `git pull` in the folder, or unzip the new release over the old folder, then click ⟳ on TabMarks in `brave://extensions`. Open tabs keep their marks.
 - **The extension ID is pinned** to `efndngfadgjplfknhdmghaooinnoakhe` by the `key` in `manifest.json`, whichever folder you load it from. Don't remove `key`, or the browser will treat TabMarks as a new, empty extension.
 - **Never click Remove** in `brave://extensions`. That deletes the stored data. Use ⟳ or the on/off toggle instead.
 - **Back up** from Settings → Backup → **Export JSON**.
