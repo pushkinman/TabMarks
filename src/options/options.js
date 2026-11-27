@@ -675,14 +675,19 @@ function bind() {
 function scrollSpy() {
   const links = [...document.querySelectorAll('#nav a')];
   const setOn = (id) => links.forEach((a) => a.classList.toggle('on', a.getAttribute('href') === `#${id}`));
+  const sections = [...document.querySelectorAll('main section.card')];
+  // Track every section in the band, not just the ones in this callback, and
+  // highlight the first one in page order.
+  const inBand = new Set();
   const obs = new IntersectionObserver(
     (entries) => {
-      const vis = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-      if (vis[0]) setOn(vis[0].target.id);
+      for (const e of entries) e.isIntersecting ? inBand.add(e.target) : inBand.delete(e.target);
+      const first = sections.find((s) => inBand.has(s));
+      if (first) setOn(first.id);
     },
     { rootMargin: '-10% 0px -60% 0px' },
   );
-  document.querySelectorAll('main section.card').forEach((s) => obs.observe(s));
+  sections.forEach((s) => obs.observe(s));
   setOn(location.hash.slice(1) || 'rules');
 }
 
