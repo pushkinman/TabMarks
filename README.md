@@ -112,7 +112,7 @@ Developed and tested in Brave. Any Chromium browser with Manifest V3 should work
 ### Sticky notes on the page
 
 <p align="center">
-  <img src="docs/media/note.png" alt="A floating note card on a pull request page, showing the Awaiting review label and two lines of text" width="400">
+  <img src="docs/media/note.png" alt="A floating note card showing the Awaiting review label and two lines of text" width="360">
 </p>
 
 - Every tab can have a note. It floats on the page in a card that you can drag, collapse, hide and edit right there.
